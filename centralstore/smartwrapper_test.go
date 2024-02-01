@@ -2,6 +2,7 @@ package centralstore
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -30,10 +31,11 @@ func TestSingleTraceOperation(t *testing.T) {
 	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
 	defer store.Stop()
 
+	randomNum := rand.Intn(500)
 	span := &CentralSpan{
-		TraceID:  "trace1",
-		SpanID:   "span1",
-		ParentID: "parent1", // we don't want this to be a root span
+		TraceID:  fmt.Sprintf("trace%d", randomNum),
+		SpanID:   fmt.Sprintf("span%d", randomNum),
+		ParentID: fmt.Sprintf("parent%d", randomNum), // we don't want this to be a root span
 	}
 	store.WriteSpan(span)
 
