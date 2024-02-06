@@ -21,14 +21,20 @@ func standardOptions() SmartWrapperOptions {
 		StateTicker:     duration("10ms"),
 		SendDelay:       duration("250ms"),
 		TraceTimeout:    duration("500ms"),
-		DecisionTimeout: duration("100ms"),
+		DecisionTimeout: duration("500ms"),
 	}
 	return sopts
 }
 
 func TestSingleTraceOperation(t *testing.T) {
 	sopts := standardOptions()
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
 	defer store.Stop()
 
 	randomNum := rand.Intn(500)
@@ -69,7 +75,13 @@ func TestSingleTraceOperation(t *testing.T) {
 
 func TestBasicStoreOperation(t *testing.T) {
 	sopts := standardOptions()
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
 	defer store.Stop()
 
 	traceids := make([]string, 0)
@@ -115,7 +127,14 @@ func TestBasicStoreOperation(t *testing.T) {
 
 func BenchmarkStoreWriteSpan(b *testing.B) {
 	sopts := standardOptions()
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
+	defer store.Stop()
 
 	spans := make([]*CentralSpan, 0)
 	for i := 0; i < 100; i++ {
@@ -134,7 +153,14 @@ func BenchmarkStoreWriteSpan(b *testing.B) {
 
 func BenchmarkStoreGetStatus(b *testing.B) {
 	sopts := standardOptions()
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
+	defer store.Stop()
 
 	spans := make([]*CentralSpan, 0)
 	for i := 0; i < 100; i++ {
@@ -154,7 +180,14 @@ func BenchmarkStoreGetStatus(b *testing.B) {
 
 func BenchmarkStoreGetTrace(b *testing.B) {
 	sopts := standardOptions()
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
+	defer store.Stop()
 
 	spans := make([]*CentralSpan, 0)
 	for i := 0; i < 100; i++ {
@@ -177,7 +210,14 @@ func BenchmarkStoreGetTracesForState(b *testing.B) {
 	sopts := standardOptions()
 	sopts.SendDelay = duration("100ms")
 	sopts.TraceTimeout = duration("100ms")
-	store := NewSmartWrapper(sopts, NewLocalRemoteStore())
+	redisStore := NewRedisBasicStore(RedisRemoteStoreOptions{Cache: config.SampleCacheConfig{
+		KeptSize:          100,
+		DroppedSize:       10000,
+		SizeCheckInterval: config.Duration(10 * time.Second),
+	}})
+	cleanupRedisStore(redisStore)
+	store := NewSmartWrapper(sopts, redisStore)
+	defer store.Stop()
 
 	spans := make([]*CentralSpan, 0)
 	for i := 0; i < 100; i++ {
@@ -194,4 +234,15 @@ func BenchmarkStoreGetTracesForState(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		store.GetTracesForState(ReadyForDecision)
 	}
+}
+
+func cleanupRedisStore(store *RedisBasicStore) error {
+	conn := store.client.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("FLUSHALL")
+	if err != nil {
+		return err
+	}
+	return nil
 }

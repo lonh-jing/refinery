@@ -14,6 +14,7 @@ type statusMap map[string]*CentralTraceStatus
 type SmartWrapper struct {
 	basicStore BasicStorer
 	keyfields  []string
+	stopped    chan struct{}
 	spanChan   chan *CentralSpan
 	done       chan struct{}
 }
@@ -34,6 +35,7 @@ type SmartWrapperOptions struct {
 func NewSmartWrapper(options SmartWrapperOptions, basic BasicStorer) *SmartWrapper {
 	i := &SmartWrapper{
 		basicStore: basic,
+		stopped:    make(chan struct{}),
 		spanChan:   make(chan *CentralSpan, options.SpanChannelSize),
 		done:       make(chan struct{}),
 	}
@@ -49,9 +51,8 @@ func NewSmartWrapper(options SmartWrapperOptions, basic BasicStorer) *SmartWrapp
 func (i *SmartWrapper) Stop() {
 	// close the span channel to stop the span processor,
 	// but first set spanChan to nil so that we won't accept any more spans
-	schan := i.spanChan
-	i.spanChan = nil
-	close(schan)
+	close(i.stopped)
+	close(i.spanChan)
 	// stop the state manager
 	close(i.done)
 }
@@ -90,13 +91,11 @@ func (i *SmartWrapper) SetKeyFields(keyFields []string) error {
 // The latest value for a span should be retained, because during shutdown, the
 // span will contain more fields.
 func (i *SmartWrapper) WriteSpan(span *CentralSpan) error {
-	// if the span channel doesn't exist, we're shutting down and we can't accept any more spans
-	if i.spanChan == nil {
-		return fmt.Errorf("span channel closed")
-	}
 
 	// otherwise, put the span in the channel but don't block
 	select {
+	case <-i.stopped:
+		return nil
 	case i.spanChan <- span:
 	default:
 		return fmt.Errorf("span queue full")
