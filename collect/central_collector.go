@@ -116,32 +116,9 @@ func (c *CentralCollector) Start() error {
 
 	// spin up one collector because this is a single threaded collector
 	c.eg = &errgroup.Group{}
-	// TODO: this isn't what we actually want here; it's not doing what it says it is
-	c.eg.SetLimit(c.Config.GetCentralCollectorConfig().RetryLimit)
-	c.eg.Go(func() error {
-		err := catchPanic(c.collect)
-		if err != nil {
-			c.Logger.Error().Logf("error collecting spans: %s", err)
-		}
-		return nil
-	})
-
-	c.eg.Go(func() error {
-		err := catchPanic(c.processor)
-		if err != nil {
-			c.Logger.Error().Logf("error processing traces: %s", err)
-		}
-		return nil
-	})
-
-	c.eg.Go(func() error {
-		err := catchPanic(c.decider)
-		if err != nil {
-			c.Logger.Error().Logf("error making decision for traces: %s", err)
-		}
-		return nil
-	})
-
+	c.eg.Go(c.collect)
+	c.eg.Go(c.processor)
+	c.eg.Go(c.decider)
 	return nil
 }
 
