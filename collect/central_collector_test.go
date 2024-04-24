@@ -44,7 +44,7 @@ func TestCentralCollector_AddSpan(t *testing.T) {
 				SendTickerVal:      2 * time.Millisecond,
 				ParentIdFieldNames: []string{"trace.parent_id", "parentId"},
 				GetCollectionConfigVal: config.CollectionConfig{
-					CacheCapacity: 3,
+					IncomingQueueSize: 3,
 				},
 			}
 			coll := &CentralCollector{}
@@ -116,7 +116,7 @@ func TestCentralCollector_ProcessTraces(t *testing.T) {
 				SendTickerVal:      2 * time.Millisecond,
 				ParentIdFieldNames: []string{"trace.parent_id", "parentId"},
 				GetCollectionConfigVal: config.CollectionConfig{
-					CacheCapacity:              100,
+					IncomingQueueSize:          100,
 					ProcessTracesPauseDuration: config.Duration(1 * time.Second),
 					DeciderPauseDuration:       config.Duration(1 * time.Second),
 				},
@@ -404,7 +404,7 @@ func TestCentralCollector_SampleConfigReload(t *testing.T) {
 				SendTickerVal:      2 * time.Millisecond,
 				ParentIdFieldNames: []string{"trace.parent_id", "parentId"},
 				GetCollectionConfigVal: config.CollectionConfig{
-					CacheCapacity:              10,
+					IncomingQueueSize:          10,
 					ProcessTracesPauseDuration: config.Duration(1 * time.Second),
 					DeciderPauseDuration:       config.Duration(1 * time.Second),
 				},
@@ -1210,7 +1210,7 @@ func TestCentralCollector_Shutdown(t *testing.T) {
 				SendTickerVal:      2 * time.Millisecond,
 				ParentIdFieldNames: []string{"trace.parent_id", "parentId"},
 				GetCollectionConfigVal: config.CollectionConfig{
-					CacheCapacity:              100,
+					IncomingQueueSize:          100,
 					ProcessTracesPauseDuration: config.Duration(1 * time.Second),
 					DeciderPauseDuration:       config.Duration(1 * time.Second),
 					ShutdownDelay:              config.Duration(500 * time.Millisecond),
@@ -1261,7 +1261,7 @@ func TestCentralCollector_Shutdown(t *testing.T) {
 
 			// start the decider again to mock trace decision process
 			collector.deciderCycle.Continue()
-			time.Sleep(conf.GetCollectionConfigVal.GetDeciderPauseDuration() * 3)
+			time.Sleep(time.Duration(conf.GetCollectionConfigVal.DeciderPauseDuration) * 3)
 
 			waitForTraceDecision(t, collector, traceids)
 

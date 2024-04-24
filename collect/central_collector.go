@@ -99,14 +99,13 @@ func (c *CentralCollector) Start() error {
 	// listen for config reloads
 	c.Config.RegisterReloadCallback(c.sendReloadSignal)
 
-	c.incoming = make(chan *types.Span, collectorCfg.GetIncomingQueueSize())
+	c.incoming = make(chan *types.Span, collectorCfg.IncomingQueueSize)
 	c.reload = make(chan struct{}, 1)
 	c.samplersByDestination = make(map[string]sample.Sampler)
 
-	// test hooks
 	c.metricsCycle = NewCycle(c.Clock, c.Config.GetSendTickerValue(), c.done)
-	c.processorCycle = NewCycle(c.Clock, collectorCfg.GetProcessTracesPauseDuration(), c.done)
-	c.deciderCycle = NewCycle(c.Clock, collectorCfg.GetDeciderPauseDuration(), c.done)
+	c.processorCycle = NewCycle(c.Clock, time.Duration(collectorCfg.ProcessTracesPauseDuration), c.done)
+	c.deciderCycle = NewCycle(c.Clock, time.Duration(collectorCfg.DeciderPauseDuration), c.done)
 
 	c.Metrics.Register("collector_processor_batch_count", "histogram")
 	c.Metrics.Register("collector_decider_batch_count", "histogram")
@@ -141,6 +140,9 @@ func (c *CentralCollector) Start() error {
 		return c.metricsCycle.Run(context.Background(), func(ctx context.Context) error {
 			if err := c.Store.RecordMetrics(ctx); err != nil {
 				c.Logger.Error().Logf("error recording metrics: %s", err)
+				if c.isTest {
+					return err
+				}
 			}
 
 			return nil
@@ -160,7 +162,7 @@ func (c *CentralCollector) Stop() error {
 	}
 
 	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, c.Config.GetCollectionConfig().GetShutdownDelay())
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(c.Config.GetCollectionConfig().ShutdownDelay))
 	defer cancel()
 
 	if err := c.shutdown(ctx); err != nil {
@@ -188,7 +190,7 @@ func (c *CentralCollector) shutdown(ctx context.Context) error {
 	processCycle := NewCycle(c.Clock, interval, done)
 
 	// create a new context with a deadline that's half of the shutdown delay for the processor cycle
-	processCtx, cancel := context.WithTimeout(ctx, c.Config.GetCollectionConfig().GetShutdownDelay()/2)
+	processCtx, cancel := context.WithTimeout(ctx, time.Duration(c.Config.GetCollectionConfig().ShutdownDelay)/2)
 	defer cancel()
 
 	if err := processCycle.Run(processCtx, func(ctx context.Context) error {
@@ -315,7 +317,7 @@ func (c *CentralCollector) process() error {
 }
 
 func (c *CentralCollector) processTraces(ctx context.Context) error {
-	ids := c.SpanCache.GetTraceIDs(c.Config.GetCollectionConfig().GetProcessTracesBatchSize())
+	ids := c.SpanCache.GetTraceIDs(c.Config.GetCollectionConfig().ProcessTracesBatchSize)
 
 	c.Metrics.Histogram("collector_processor_batch_count", len(ids))
 	if len(ids) == 0 {
@@ -358,7 +360,7 @@ func (c *CentralCollector) decide() error {
 }
 
 func (c *CentralCollector) makeDecision(ctx context.Context) error {
-	tracesIDs, err := c.Store.GetTracesNeedingDecision(ctx, c.Config.GetCollectionConfig().GetDeciderBatchSize())
+	tracesIDs, err := c.Store.GetTracesNeedingDecision(ctx, c.Config.GetCollectionConfig().DeciderBatchSize)
 	if err != nil {
 		return err
 	}
@@ -570,7 +572,7 @@ func (c *CentralCollector) processSpan(sp *types.Span) error {
 
 func (c *CentralCollector) checkAlloc() {
 	inMemConfig := c.Config.GetCollectionConfig()
-	maxAlloc := inMemConfig.GetMaxAlloc()
+	maxAlloc := inMemConfig.MaxAlloc
 
 	var mem runtime.MemStats
 	// Manually GC here - so we can get a more accurate picture of memory usage
@@ -710,7 +712,7 @@ func (c *CentralCollector) reloadConfig() {
 
 	c.StressRelief.UpdateFromConfig(c.Config.GetStressReliefConfig())
 
-	c.Metrics.Store("MEMORY_MAX_ALLOC", float64(c.Config.GetCollectionConfig().GetMaxAlloc()))
+	c.Metrics.Store("MEMORY_MAX_ALLOC", float64(c.Config.GetCollectionConfig().MaxAlloc))
 
 	// clear out any samplers that we have previously created
 	// so that the new configuration will be propagated

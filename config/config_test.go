@@ -501,7 +501,7 @@ func TestPeerAndIncomingQueueSize(t *testing.T) {
 		assert.NoError(t, err)
 
 		inMemConfig := c.GetCollectionConfig()
-		assert.Equal(t, tc.expectedForIncoming, inMemConfig.GetIncomingQueueSize())
+		assert.Equal(t, tc.expectedForIncoming, inMemConfig.IncomingQueueSize)
 	}
 }
 

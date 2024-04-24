@@ -108,10 +108,12 @@ func newStartedApp(
 		IsAPIKeyValidFunc:        func(k string) bool { return k == legacyAPIKey || k == nonLegacyAPIKey },
 		GetHoneycombAPIVal:       "http://api.honeycomb.io",
 		GetCollectionConfigVal: config.CollectionConfig{
-			CacheCapacity:              10000,
+			IncomingQueueSize:          10000,
 			ProcessTracesPauseDuration: config.Duration(100 * time.Millisecond),
 			DeciderPauseDuration:       config.Duration(10 * time.Millisecond),
 			ShutdownDelay:              config.Duration(1 * time.Millisecond),
+			ProcessTracesBatchSize:     100,
+			DeciderBatchSize:           100,
 		},
 		AddHostMetadataToTrace: enableHostMetadata,
 		TraceIdFieldNames:      []string{"trace.trace_id"},

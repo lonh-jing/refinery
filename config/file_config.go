@@ -239,54 +239,6 @@ type SmartWrapperOptions struct {
 	ReaperRunInterval Duration `yaml:"ReaperRunInterval" default:"1h"`
 }
 
-func (c CollectionConfig) GetShutdownDelay() time.Duration {
-	if c.ShutdownDelay == 0 {
-		return 30 * time.Second
-	}
-	return time.Duration(c.ShutdownDelay)
-}
-
-// GetMaxAlloc returns the maximum amount of memory to use for the cache.
-// If AvailableMemory is set, it uses that and MaxMemoryPercentage to calculate
-func (c CollectionConfig) GetMaxAlloc() MemorySize {
-	if c.AvailableMemory == 0 || c.MaxMemoryPercentage == 0 {
-		return c.MaxAlloc
-	}
-	return c.AvailableMemory * MemorySize(c.MaxMemoryPercentage) / 100
-}
-
-// GetIncomingBufferCapacity returns the capacity of the in-memory channel for incoming traces.
-// If IncomingBufferCapacity is not set, it uses 3x the cache capacity.
-// The minimum value is 3x the cache capacity.
-func (c CollectionConfig) GetIncomingQueueSize() int {
-	if c.IncomingQueueSize == 0 || c.IncomingQueueSize < c.CacheCapacity*3 {
-		return c.CacheCapacity * 3
-	}
-	return c.IncomingQueueSize
-}
-
-func (c CollectionConfig) GetProcessTracesBatchSize() int {
-	if c.ProcessTracesBatchSize == 0 {
-		return 50
-	}
-	return c.ProcessTracesBatchSize
-}
-
-func (c CollectionConfig) GetProcessTracesPauseDuration() time.Duration {
-	return time.Duration(c.ProcessTracesPauseDuration)
-}
-
-func (c CollectionConfig) GetDeciderPauseDuration() time.Duration {
-	return time.Duration(c.DeciderPauseDuration)
-}
-
-func (c CollectionConfig) GetDeciderBatchSize() int {
-	if c.DeciderBatchSize == 0 {
-		return 50
-	}
-	return c.DeciderBatchSize
-}
-
 type BufferSizeConfig struct {
 	UpstreamBufferSize int `yaml:"UpstreamBufferSize" default:"10_000"`
 	PeerBufferSize     int `yaml:"PeerBufferSize" default:"100_000"`
@@ -768,7 +720,44 @@ func (f *fileConfig) GetCollectionConfig() CollectionConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.Collection
+	cfg := f.mainConfig.Collection
+	maxAloc := cfg.AvailableMemory * MemorySize(cfg.MaxMemoryPercentage) / 100
+	if cfg.AvailableMemory == 0 || cfg.MaxMemoryPercentage == 0 {
+		maxAloc = cfg.MaxAlloc
+	}
+
+	incomingQueueSize := cfg.IncomingQueueSize
+	if cfg.IncomingQueueSize == 0 || cfg.IncomingQueueSize < cfg.CacheCapacity*3 {
+		incomingQueueSize = cfg.CacheCapacity * 3
+	}
+
+	processTracesBatchSize := cfg.ProcessTracesBatchSize
+	if cfg.ProcessTracesBatchSize == 0 {
+		processTracesBatchSize = 50
+	}
+
+	deciderBatchSize := cfg.DeciderBatchSize
+	if cfg.DeciderBatchSize == 0 {
+		deciderBatchSize = 50
+	}
+
+	shutdownDelay := cfg.ShutdownDelay
+	if cfg.ShutdownDelay == 0 {
+		shutdownDelay = Duration(30 * time.Second)
+	}
+
+	return CollectionConfig{
+		CacheCapacity:              cfg.CacheCapacity,
+		IncomingQueueSize:          incomingQueueSize,
+		ProcessTracesBatchSize:     processTracesBatchSize,
+		ProcessTracesPauseDuration: cfg.ProcessTracesPauseDuration,
+		DeciderPauseDuration:       cfg.DeciderPauseDuration,
+		DeciderBatchSize:           deciderBatchSize,
+		AvailableMemory:            cfg.AvailableMemory,
+		MaxMemoryPercentage:        cfg.MaxMemoryPercentage,
+		MaxAlloc:                   maxAloc,
+		ShutdownDelay:              shutdownDelay,
+	}
 }
 
 func (f *fileConfig) GetLegacyMetricsConfig() LegacyMetricsConfig {
