@@ -295,13 +295,15 @@ func TestAddSpan(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "mytrace"
+	parentID := "parentID"
 
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},
@@ -398,8 +400,10 @@ func TestDryRunMode(t *testing.T) {
 	transmission.Mux.RUnlock()
 
 	// add a non-root span, create the trace in the cache
+	parentId := "unused"
 	span = &types.Span{
-		TraceID: traceID2,
+		TraceID:  traceID2,
+		ParentID: parentId,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
@@ -479,17 +483,18 @@ func TestCacheSizeReload(t *testing.T) {
 	assert.NoError(t, err)
 	defer coll.Stop()
 
+	parentID := "1"
 	event := types.Event{
 		Dataset: "dataset",
 		Data: map[string]interface{}{
-			"trace.parent_id": "1",
+			"trace.parent_id": parentID,
 		},
 		APIKey: legacyAPIKey,
 	}
 
-	err = coll.AddSpan(&types.Span{TraceID: "1", Event: event})
+	err = coll.AddSpan(&types.Span{TraceID: "1", Event: event, ParentID: parentID})
 	assert.NoError(t, err)
-	err = coll.AddSpan(&types.Span{TraceID: "2", Event: event})
+	err = coll.AddSpan(&types.Span{TraceID: "2", Event: event, ParentID: parentID})
 	assert.NoError(t, err)
 
 	expectedEvents := 1
@@ -514,7 +519,7 @@ func TestCacheSizeReload(t *testing.T) {
 		return coll.cache.(*cache.DefaultInMemCache).GetCacheSize() == 2
 	}, 60*wait, wait, "cache size to change")
 
-	err = coll.AddSpan(&types.Span{TraceID: "3", Event: event})
+	err = coll.AddSpan(&types.Span{TraceID: "3", Event: event, ParentID: parentID})
 	assert.NoError(t, err)
 	time.Sleep(5 * conf.SendTickerVal)
 	assert.True(t, check(), "expected no more traces evicted and sent")
@@ -613,10 +618,11 @@ func TestStableMaxAlloc(t *testing.T) {
 	transmission.Start()
 	coll := newTestCollector(conf, transmission)
 
+	parentID := "unused"
 	spandata := make([]map[string]interface{}, 500)
 	for i := 0; i < 500; i++ {
 		spandata[i] = map[string]interface{}{
-			"trace.parent_id": "unused",
+			"trace.parent_id": parentID,
 			"id":              i,
 			"str1":            strings.Repeat("abc", rand.Intn(100)+1),
 			"str2":            strings.Repeat("def", rand.Intn(100)+1),
@@ -637,7 +643,8 @@ func TestStableMaxAlloc(t *testing.T) {
 
 	for i := 0; i < 500; i++ {
 		span := &types.Span{
-			TraceID: strconv.Itoa(i),
+			TraceID:  strconv.Itoa(i),
+			ParentID: parentID,
 			Event: types.Event{
 				Dataset: "aoeu",
 				Data:    spandata[i],
@@ -788,13 +795,15 @@ func TestAddCountsToRoot(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "mytrace"
+	parentID := "unused"
 	for i := 0; i < 4; i++ {
 		span := &types.Span{
-			TraceID: traceID,
+			TraceID:  traceID,
+			ParentID: parentID,
 			Event: types.Event{
 				Dataset: "aoeu",
 				Data: map[string]interface{}{
-					"trace.parent_id": "unused",
+					"trace.parent_id": parentID,
 				},
 				APIKey: legacyAPIKey,
 			},
@@ -867,14 +876,16 @@ func TestLateRootGetsCounts(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "mytrace"
+	parentID := "unused"
 
 	for i := 0; i < 4; i++ {
 		span := &types.Span{
-			TraceID: traceID,
+			TraceID:  traceID,
+			ParentID: parentID,
 			Event: types.Event{
 				Dataset: "aoeu",
 				Data: map[string]interface{}{
-					"trace.parent_id": "unused",
+					"trace.parent_id": parentID,
 				},
 				APIKey: legacyAPIKey,
 			},
@@ -947,13 +958,14 @@ func TestAddSpanCount(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "mytrace"
-
+	parentID := "unused"
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},
@@ -1010,13 +1022,15 @@ func TestLateRootGetsSpanCount(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "mytrace"
+	parentID := "unused"
 
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},
@@ -1075,13 +1089,14 @@ func TestLateSpanNotDecorated(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "traceABC"
-
+	parentID := "unused"
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},
@@ -1136,13 +1151,15 @@ func TestAddAdditionalAttributes(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "trace123"
+	parentID := "unused"
 
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},
@@ -1203,13 +1220,15 @@ func TestStressReliefDecorateHostname(t *testing.T) {
 	defer coll.Stop()
 
 	var traceID = "traceABC"
+	parentID := "unused"
 
 	span := &types.Span{
-		TraceID: traceID,
+		TraceID:  traceID,
+		ParentID: parentID,
 		Event: types.Event{
 			Dataset: "aoeu",
 			Data: map[string]interface{}{
-				"trace.parent_id": "unused",
+				"trace.parent_id": parentID,
 			},
 			APIKey: legacyAPIKey,
 		},

@@ -520,9 +520,20 @@ func (r *Router) processEvent(ev *types.Event, reqID interface{}) error {
 	}
 	debugLog = debugLog.WithString("trace_id", traceID)
 
+	// extract parent ID
+	var parentID string
+	for _, parentIDFieldName := range r.Config.GetParentIdFieldNames() {
+		pID := ev.Data[parentIDFieldName]
+		if id, ok := pID.(string); ok {
+			parentID = id
+			break
+		}
+	}
+
 	span := &types.Span{
-		Event:   *ev,
-		TraceID: traceID,
+		Event:    *ev,
+		TraceID:  traceID,
+		ParentID: parentID,
 	}
 
 	// we know we're a span, but we need to check if we're in Stress Relief mode;

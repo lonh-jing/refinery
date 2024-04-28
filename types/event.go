@@ -184,6 +184,7 @@ func (t *Trace) GetSamplerKey() (string, bool) {
 // Span is an event that shows up with a trace ID, so will be part of a Trace
 type Span struct {
 	Event
+	ParentID    string
 	TraceID     string
 	DataSize    int
 	ArrivalTime time.Time
