@@ -530,10 +530,16 @@ func (r *Router) processEvent(ev *types.Event, reqID interface{}) error {
 		}
 	}
 
+	var spanID string
+	if id, ok := ev.Data["trace.span_id"].(string); ok {
+		spanID = id
+	}
+
 	span := &types.Span{
 		Event:    *ev,
 		TraceID:  traceID,
 		ParentID: parentID,
+		SpanID:   spanID,
 	}
 
 	// we know we're a span, but we need to check if we're in Stress Relief mode;

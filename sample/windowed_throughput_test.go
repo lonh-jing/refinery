@@ -1,6 +1,7 @@
 package sample
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/honeycombio/refinery/config"
@@ -28,6 +29,7 @@ func TestWindowedThroughputAddSampleRateKeyToTrace(t *testing.T) {
 	trace := &types.Trace{}
 	for i := 0; i < spanCount; i++ {
 		trace.AddSpan(&types.Span{
+			SpanID: fmt.Sprintf("span-%d", i),
 			Event: types.Event{
 				Data: map[string]interface{}{
 					"http.status_code": 200,

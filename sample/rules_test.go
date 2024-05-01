@@ -42,6 +42,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(1),
@@ -70,6 +71,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(2),
@@ -98,6 +100,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(1),
@@ -126,6 +129,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span4",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(1),
@@ -158,6 +162,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span5",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(1),
@@ -197,6 +202,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span6",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":     2.2,
@@ -233,6 +239,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span7",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": float64(3),
@@ -254,6 +261,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span8",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(1),
@@ -287,6 +295,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span9",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": int64(1),
@@ -324,6 +333,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span10",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": int64(9),
@@ -351,6 +361,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span11",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": int64(9),
@@ -378,6 +389,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span12",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"second": int64(9),
@@ -406,6 +418,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span13",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": "honeycomb",
@@ -434,6 +447,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span14",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": "honeycomb",
@@ -462,6 +476,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span15",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"first": "honeycomb",
@@ -490,6 +505,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span16",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": int64(2),
@@ -518,6 +534,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -528,6 +545,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "654321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -561,6 +580,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -571,6 +591,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "654321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -581,6 +603,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -613,6 +637,8 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID:   "654321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -623,6 +649,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -654,6 +682,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -664,6 +693,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "654321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -674,6 +705,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -706,6 +739,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "whatever",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test2": int64(17),
@@ -734,6 +768,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "whatever",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test2": int64(16),
@@ -763,6 +798,7 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "whatever",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":  int64(2),
@@ -779,7 +815,7 @@ func TestRules(t *testing.T) {
 			Rules: &config.RulesBasedSamplerConfig{
 				Rules: []*config.RulesBasedSamplerRule{
 					{
-						Name:       "Check that the number of descendants is greater than 3",
+						Name:       "Check that NUM_DESCENDINGS > 3 matches",
 						SampleRate: 1,
 						Conditions: []*config.RulesBasedSamplerCondition{
 							{
@@ -795,6 +831,8 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID:   "54322",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -805,6 +843,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "654321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -814,6 +854,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -823,16 +865,18 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "854321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
-							"trace.span_id":   "754321",
+							"trace.span_id":   "854321",
 							"trace.parent_id": "54322",
 						},
 					},
 				},
 			},
-			ExpectedName: "Check that the number of descendants is greater than 3",
+			ExpectedName: "Check that NUM_DESCENDINGS > 3 matches",
 			ExpectedKeep: false,
 			ExpectedRate: 1,
 		},
@@ -840,7 +884,7 @@ func TestRules(t *testing.T) {
 			Rules: &config.RulesBasedSamplerConfig{
 				Rules: []*config.RulesBasedSamplerRule{
 					{
-						Name:       "Check that the number of descendants is less than 3",
+						Name:       "Check that condition NUM_DESCENDANTS < 3 doesn't match",
 						SampleRate: 1,
 						Conditions: []*config.RulesBasedSamplerCondition{
 							{
@@ -854,6 +898,8 @@ func TestRules(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID:   "54322",
+					ParentID: "54321",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -864,6 +910,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "654321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -873,6 +921,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -882,6 +932,8 @@ func TestRules(t *testing.T) {
 					},
 				},
 				{
+					SpanID:   "754321",
+					ParentID: "54322",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"trace.trace_id":  "12345",
@@ -914,7 +966,7 @@ func TestRules(t *testing.T) {
 
 		for _, span := range d.Spans {
 			trace.AddSpan(span)
-			if _, ok := span.Data["trace.parent_id"]; ok == false {
+			if span.ParentID == "" {
 				trace.RootSpan = span
 			}
 		}
@@ -1155,6 +1207,7 @@ func TestRulesWithDynamicSampler(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1163,6 +1216,7 @@ func TestRulesWithDynamicSampler(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1241,6 +1295,7 @@ func TestRulesWithEMADynamicSampler(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1249,6 +1304,7 @@ func TestRulesWithEMADynamicSampler(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1315,6 +1371,7 @@ func TestRuleMatchesSpanMatchingSpan(t *testing.T) {
 			keepTraceScope: true,
 			spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1323,6 +1380,7 @@ func TestRuleMatchesSpanMatchingSpan(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(5),
@@ -1338,6 +1396,7 @@ func TestRuleMatchesSpanMatchingSpan(t *testing.T) {
 			keepTraceScope: true,
 			spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -1346,6 +1405,7 @@ func TestRuleMatchesSpanMatchingSpan(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(5),
@@ -2095,6 +2155,7 @@ func TestRulesWithDeterministicSampler(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -2103,6 +2164,7 @@ func TestRulesWithDeterministicSampler(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"rule_test":        int64(1),
@@ -2176,6 +2238,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "foo",
@@ -2183,6 +2246,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2190,6 +2254,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test1": 1,
@@ -2227,6 +2292,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "foo",
@@ -2234,6 +2300,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2241,6 +2308,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test1": 1,
@@ -2277,6 +2345,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":         "foo",
@@ -2285,6 +2354,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2293,6 +2363,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test1": 1,
@@ -2333,6 +2404,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":         "foo",
@@ -2341,6 +2413,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2349,6 +2422,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test1": 1,
@@ -2389,6 +2463,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":         "foo",
@@ -2397,6 +2472,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2405,6 +2481,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test1": 1,
@@ -2438,6 +2515,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "nope", // I am the root span that does not match.
@@ -2445,6 +2523,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2452,6 +2531,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":  "foo", // I am the span that almost matches, but I'm not root.
@@ -2485,6 +2565,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "nope",
@@ -2492,6 +2573,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2499,6 +2581,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test":  "nope",
@@ -2531,6 +2614,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "nope",
@@ -2538,6 +2622,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2545,6 +2630,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "500",
@@ -2575,6 +2661,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "123testABC", // I am root.
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"test": "nope",
@@ -2582,6 +2669,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2589,6 +2677,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span3",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "500",
@@ -2618,6 +2707,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "200",
@@ -2625,6 +2715,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"http.status_code": "500",
@@ -2654,6 +2745,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": 100.01,
@@ -2661,6 +2753,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": 99.1,
@@ -2691,6 +2784,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": true,
@@ -2698,6 +2792,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": true,
@@ -2731,6 +2826,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "abc123",
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"name.of.service": "is not service.name!",
@@ -2738,6 +2834,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": true,
@@ -2771,6 +2868,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			Spans: []*types.Span{
 				{
 					TraceID: "abc123",
+					SpanID:  "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"service.name": "totally present",
@@ -2778,6 +2876,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": true,
@@ -2807,6 +2906,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 			},
 			Spans: []*types.Span{
 				{
+					SpanID: "span1",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"service.name": "no trace id on this test span, so it's not root",
@@ -2814,6 +2914,7 @@ func TestRulesRootSpanContext(t *testing.T) {
 					},
 				},
 				{
+					SpanID: "span2",
 					Event: types.Event{
 						Data: map[string]interface{}{
 							"foo": true,

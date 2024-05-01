@@ -4,6 +4,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSpan_GetDataSize(t *testing.T) {
@@ -104,4 +107,48 @@ func BenchmarkSpan_CalculateSizeLarge(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		sp.GetDataSize()
 	}
+}
+
+func TestCalculateRelativeSpanStartDurations(t *testing.T) {
+	rootSpan := &Span{
+		Event: Event{
+			Timestamp: time.Now(),
+			Data:      map[string]any{},
+		},
+		SpanID: "rootSpan",
+	}
+
+	trace := Trace{
+		RootSpan: rootSpan,
+		spans:    map[string]*Span{},
+	}
+	trace.spans["rootSpan"] = rootSpan
+
+	childSpan1 := &Span{
+		Event: Event{
+			Timestamp: rootSpan.Timestamp.Add(10 * time.Millisecond),
+			Data:      map[string]any{},
+		},
+		SpanID:   "childSpan1",
+		ParentID: "rootSpan",
+	}
+	childSpan2 := &Span{
+		Event: Event{
+			Timestamp: rootSpan.Timestamp.Add(25 * time.Millisecond),
+			Data:      map[string]any{},
+		},
+		SpanID:   "childSpan2",
+		ParentID: "childSpan1",
+	}
+
+	trace.AddSpan(childSpan1)
+	trace.AddSpan(childSpan2)
+
+	trace.CalculateRelativeSpanStartDurations()
+
+	assert.Equal(t, int64(10), childSpan1.Data["relative_start_time_ms"].(int64), "Relative start time for childSpan1 should be 10ms")
+	assert.Equal(t, int64(10), childSpan1.Data["relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan1 should be 10ms")
+
+	assert.Equal(t, int64(25), childSpan2.Data["relative_start_time_ms"].(int64), "Relative start time for childSpan2 should be 20ms")
+	assert.Equal(t, int64(15), childSpan2.Data["relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan2 should be 10ms")
 }

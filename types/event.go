@@ -62,7 +62,8 @@ type Trace struct {
 	DataSize int
 
 	// spans is the list of spans in this trace
-	spans []*Span
+	// TODO: does this break stuff, since maps don't allow duplicates?
+	spans map[string]*Span
 
 	// totalImpact is the sum of the trace's cacheImpact; if this value is 0
 	// it is recalculated during CacheImpact(), otherwise this value is
@@ -80,7 +81,12 @@ func (t *Trace) AddSpan(sp *Span) {
 	sp.ArrivalTime = time.Now()
 	sp.DataSize = sp.GetDataSize()
 	t.DataSize += sp.DataSize
-	t.spans = append(t.spans, sp)
+
+	if t.spans == nil {
+		t.spans = make(map[string]*Span)
+	}
+	t.spans[sp.SpanID] = sp
+
 	t.totalImpact = 0
 }
 
@@ -98,7 +104,12 @@ func (t *Trace) CacheImpact(traceTimeout time.Duration) int {
 }
 
 // GetSpans returns the list of descendants in this trace
-func (t *Trace) GetSpans() []*Span {
+func (t *Trace) GetSpans() map[string]*Span {
+	// spans := make([]*Span, 0, len(t.spans))
+	// for _, sp := range t.spans {
+	// 	spans = append(spans, sp)
+	// }
+	// return spans
 	return t.spans
 }
 
@@ -137,7 +148,6 @@ func (t *Trace) SpanCount() uint32 {
 			continue
 		default:
 			count++
-
 		}
 	}
 	return count
@@ -181,11 +191,37 @@ func (t *Trace) GetSamplerKey() (string, bool) {
 	return env, false
 }
 
+// CalculateRelativeSpanStartDurations calculates the relative start time of each span
+// in the trace, based on the root span's timestamp and the parent span's timestamp.
+//
+// This is explicitly NOT done in AddSpan because we need to know all the spans in the trace.
+func (t *Trace) CalculateRelativeSpanStartDurations() {
+	for _, sp := range t.spans {
+		if t.RootSpan != nil {
+			diff := sp.Timestamp.Sub(t.RootSpan.Timestamp)
+			sp.Data["relative_start_time_ms"] = diff.Milliseconds()
+		}
+
+		if sp.SpanID == t.RootSpan.SpanID {
+			continue
+		}
+
+		parentSpan := t.spans[sp.ParentID]
+		if parentSpan == nil {
+			continue
+		}
+
+		diff := sp.Timestamp.Sub(parentSpan.Timestamp)
+		sp.Data["relative_start_time_parent_ms"] = diff.Milliseconds()
+	}
+}
+
 // Span is an event that shows up with a trace ID, so will be part of a Trace
 type Span struct {
 	Event
 	ParentID    string
 	TraceID     string
+	SpanID      string
 	DataSize    int
 	ArrivalTime time.Time
 }
