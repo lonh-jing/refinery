@@ -662,7 +662,7 @@ func (i *InMemCollector) send(trace *types.Trace, sendReason string) {
 	}
 	i.Logger.Info().WithFields(logFields).Logf("Sending trace")
 
-	trace.CalculateRelativeSpanStartDurations()
+	trace.CalculateAggregateTraceStats()
 
 	for _, sp := range trace.GetSpans() {
 		if i.Config.GetAddRuleReasonToTrace() {

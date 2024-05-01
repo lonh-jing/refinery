@@ -191,28 +191,38 @@ func (t *Trace) GetSamplerKey() (string, bool) {
 	return env, false
 }
 
-// CalculateRelativeSpanStartDurations calculates the relative start time of each span
-// in the trace, based on the root span's timestamp and the parent span's timestamp.
+// Calculates the relative start time of each span and missing spans.
 //
-// This is explicitly NOT done in AddSpan because we need to know all the spans in the trace.
-func (t *Trace) CalculateRelativeSpanStartDurations() {
-	for _, sp := range t.spans {
-		if t.RootSpan != nil {
-			diff := sp.Timestamp.Sub(t.RootSpan.Timestamp)
-			sp.Data["relative_start_time_ms"] = diff.Milliseconds()
-		}
+// This is explicitly NOT done in AddSpan because we want to make sure that
+// as many spans as possible (such as the root span) are added before we start calculating this.
+func (t *Trace) CalculateAggregateTraceStats() {
+	missingSpanCount := uint32(0)
+	missingSpanIDs := make([]string, 0)
 
-		if sp.SpanID == t.RootSpan.SpanID {
+	for _, sp := range t.spans {
+		if sp.ParentID == "" {
 			continue
 		}
 
 		parentSpan := t.spans[sp.ParentID]
 		if parentSpan == nil {
-			continue
+			missingSpanIDs = append(missingSpanIDs, sp.ParentID)
+			missingSpanCount++
+			sp.Data["meta.missing_parent_id"] = sp.ParentID
+		} else {
+			diff := sp.Timestamp.Sub(parentSpan.Timestamp)
+			sp.Data["relative_start_time_parent_ms"] = diff.Milliseconds()
 		}
 
-		diff := sp.Timestamp.Sub(parentSpan.Timestamp)
-		sp.Data["relative_start_time_parent_ms"] = diff.Milliseconds()
+		if t.RootSpan != nil {
+			diff := sp.Timestamp.Sub(t.RootSpan.Timestamp)
+			sp.Data["relative_start_time_ms"] = diff.Milliseconds()
+		}
+	}
+
+	if t.RootSpan != nil {
+		t.RootSpan.Data["meta.missing_span_count"] = missingSpanCount
+		t.RootSpan.Data["meta.missing_span_ids"] = missingSpanIDs
 	}
 }
 
