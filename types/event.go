@@ -200,6 +200,7 @@ func (t *Trace) CalculateAggregateTraceStats() {
 	missingSpanIDs := make([]string, 0)
 
 	for _, sp := range t.spans {
+		// skip the root span
 		if sp.ParentID == "" {
 			continue
 		}
@@ -220,7 +221,7 @@ func (t *Trace) CalculateAggregateTraceStats() {
 		}
 	}
 
-	if t.RootSpan != nil {
+	if t.RootSpan != nil && missingSpanCount > 0 {
 		t.RootSpan.Data["meta.missing_span_count"] = missingSpanCount
 		t.RootSpan.Data["meta.missing_span_ids"] = missingSpanIDs
 	}
