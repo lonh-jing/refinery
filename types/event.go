@@ -105,11 +105,6 @@ func (t *Trace) CacheImpact(traceTimeout time.Duration) int {
 
 // GetSpans returns the list of descendants in this trace
 func (t *Trace) GetSpans() map[string]*Span {
-	// spans := make([]*Span, 0, len(t.spans))
-	// for _, sp := range t.spans {
-	// 	spans = append(spans, sp)
-	// }
-	// return spans
 	return t.spans
 }
 
