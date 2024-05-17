@@ -16,7 +16,6 @@ func TestKeyGeneration(t *testing.T) {
 	trace := &types.Trace{}
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-1",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,
@@ -39,7 +38,7 @@ func TestKeyGeneration(t *testing.T) {
 	trace = &types.Trace{}
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-1",
+		SpanID: "span1",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,
@@ -48,7 +47,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-2",
+		SpanID: "span2",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"request.path": "/{slug}/home",
@@ -57,7 +56,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-3",
+		SpanID: "span3",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"app.team.id": float64(2),
@@ -66,7 +65,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-4",
+		SpanID: "span4",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"important_field": true,
@@ -87,7 +86,7 @@ func TestKeyGeneration(t *testing.T) {
 	trace = &types.Trace{}
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-1",
+		SpanID: "span1",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,
@@ -96,7 +95,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-2",
+		SpanID: "span2",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,
@@ -105,7 +104,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-3",
+		SpanID: "span3",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 404,
@@ -114,7 +113,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-4",
+		SpanID: "span4",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 404,
@@ -135,7 +134,7 @@ func TestKeyGeneration(t *testing.T) {
 	trace = &types.Trace{}
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-1",
+		SpanID: "span1",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 404,
@@ -144,7 +143,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-2",
+		SpanID: "span2",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 404,
@@ -153,7 +152,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-3",
+		SpanID: "span3",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,
@@ -162,7 +161,7 @@ func TestKeyGeneration(t *testing.T) {
 	})
 
 	trace.AddSpan(&types.Span{
-		SpanID: "span-4",
+		SpanID: "span4",
 		Event: types.Event{
 			Data: map[string]interface{}{
 				"http.status_code": 200,

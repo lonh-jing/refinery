@@ -162,7 +162,6 @@ func TestCalculateRelativeSpanStartDurations(t *testing.T) {
 	assert.Equal(t, int64(25), childSpan2.Data["meta.relative_start_time_ms"].(int64), "Relative start time for childSpan2 should be 20ms")
 	assert.Equal(t, int64(15), childSpan2.Data["meta.relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan2 should be 10ms")
 
-	// test for meta.diff_from_parent_ms
 	assert.Equal(t, int64(5), childSpan2.Data["meta.diff_between_parent_ms"].(int64), "Diff between parent for childSpan2 should be 5ms")
 }
 
