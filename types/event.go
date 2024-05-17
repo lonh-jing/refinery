@@ -206,13 +206,18 @@ func (t *Trace) CalculateAggregateTraceStats() {
 			missingSpanCount++
 			sp.Data["meta.missing_parent_id"] = sp.ParentID
 		} else {
-			diff := sp.Timestamp.Sub(parentSpan.Timestamp)
-			sp.Data["relative_start_time_parent_ms"] = diff.Milliseconds()
+			start_diff := sp.Timestamp.Sub(parentSpan.Timestamp)
+			sp.Data["meta.relative_start_time_parent_ms"] = start_diff.Milliseconds()
+
+			parent_duration := time.Duration(parentSpan.Data["duration_ms"].(float64) * 1e6)
+			parent_absolute_end_time := parentSpan.Timestamp.Add(parent_duration)
+			diff := sp.Timestamp.Sub(parent_absolute_end_time)
+			sp.Data["meta.diff_from_parent_ms"] = diff.Milliseconds()
 		}
 
 		if t.RootSpan != nil {
 			diff := sp.Timestamp.Sub(t.RootSpan.Timestamp)
-			sp.Data["relative_start_time_ms"] = diff.Milliseconds()
+			sp.Data["meta.relative_start_time_ms"] = diff.Milliseconds()
 		}
 	}
 

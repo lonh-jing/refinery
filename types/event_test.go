@@ -113,7 +113,9 @@ func TestCalculateRelativeSpanStartDurations(t *testing.T) {
 	rootSpan := &Span{
 		Event: Event{
 			Timestamp: time.Now(),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 100.0,
+			},
 		},
 		SpanID:  "rootSpan",
 		TraceID: "traceID",
@@ -129,7 +131,9 @@ func TestCalculateRelativeSpanStartDurations(t *testing.T) {
 	childSpan1 := &Span{
 		Event: Event{
 			Timestamp: rootSpan.Timestamp.Add(10 * time.Millisecond),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 10.0,
+			},
 		},
 		SpanID:   "childSpan1",
 		ParentID: "rootSpan",
@@ -138,7 +142,9 @@ func TestCalculateRelativeSpanStartDurations(t *testing.T) {
 	childSpan2 := &Span{
 		Event: Event{
 			Timestamp: rootSpan.Timestamp.Add(25 * time.Millisecond),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 10.0,
+			},
 		},
 		SpanID:   "childSpan2",
 		ParentID: "childSpan1",
@@ -150,18 +156,23 @@ func TestCalculateRelativeSpanStartDurations(t *testing.T) {
 
 	trace.CalculateAggregateTraceStats()
 
-	assert.Equal(t, int64(10), childSpan1.Data["relative_start_time_ms"].(int64), "Relative start time for childSpan1 should be 10ms")
-	assert.Equal(t, int64(10), childSpan1.Data["relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan1 should be 10ms")
+	assert.Equal(t, int64(10), childSpan1.Data["meta.relative_start_time_ms"].(int64), "Relative start time for childSpan1 should be 10ms")
+	assert.Equal(t, int64(10), childSpan1.Data["meta.relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan1 should be 10ms")
 
-	assert.Equal(t, int64(25), childSpan2.Data["relative_start_time_ms"].(int64), "Relative start time for childSpan2 should be 20ms")
-	assert.Equal(t, int64(15), childSpan2.Data["relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan2 should be 10ms")
+	assert.Equal(t, int64(25), childSpan2.Data["meta.relative_start_time_ms"].(int64), "Relative start time for childSpan2 should be 20ms")
+	assert.Equal(t, int64(15), childSpan2.Data["meta.relative_start_time_parent_ms"].(int64), "Relative start time from parent for childSpan2 should be 10ms")
+
+	// test for meta.diff_from_parent_ms
+	assert.Equal(t, int64(5), childSpan2.Data["meta.diff_from_parent_ms"].(int64), "Diff from parent for childSpan2 should be 15ms")
 }
 
 func TestCalculateMissingParentStats(t *testing.T) {
 	rootSpan := &Span{
 		Event: Event{
 			Timestamp: time.Now(),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 100.0,
+			},
 		},
 		SpanID:  "rootSpan",
 		TraceID: "traceID",
@@ -177,7 +188,9 @@ func TestCalculateMissingParentStats(t *testing.T) {
 	childSpan1 := &Span{
 		Event: Event{
 			Timestamp: rootSpan.Timestamp.Add(10 * time.Millisecond),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 10.0,
+			},
 		},
 		SpanID:   "childSpan1",
 		ParentID: "rootSpan",
@@ -186,7 +199,9 @@ func TestCalculateMissingParentStats(t *testing.T) {
 	childSpan2 := &Span{
 		Event: Event{
 			Timestamp: rootSpan.Timestamp.Add(25 * time.Millisecond),
-			Data:      map[string]any{},
+			Data: map[string]any{
+				"duration_ms": 10.0,
+			},
 		},
 		SpanID:   "childSpan2",
 		ParentID: "missingParent",
