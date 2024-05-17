@@ -37,7 +37,7 @@ type Metrics interface {
 	Register(name string, metricType string)
 	Increment(name string)                  // for counters
 	Gauge(name string, val interface{})     // for gauges
-	Count(name string, n interface{})       // for counters
+	Count(name string, n interface{})       // for counters and updowns
 	Histogram(name string, obs interface{}) // for histogram
 	Up(name string)                         // for updown
 	Down(name string)                       // for updown
@@ -75,6 +75,11 @@ func ConvertNumeric(val interface{}) float64 {
 		return n
 	case float32:
 		return float64(n)
+	case bool:
+		if n {
+			return 1
+		}
+		return 0
 	default:
 		return 0
 	}

@@ -2,8 +2,11 @@ package types
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"time"
 
+	"github.com/gofrs/uuid/v5"
 	huskyotlp "github.com/honeycombio/husky/otlp"
 )
 
@@ -16,6 +19,10 @@ const (
 	TimestampHeader   = "X-Honeycomb-Event-Time"
 	QueryTokenHeader  = "X-Honeycomb-Refinery-Query"
 )
+
+type Fielder interface {
+	Fields() map[string]any
+}
 
 // used to put a request ID into the request context for logging
 type RequestIDContextKey struct{}
@@ -32,20 +39,28 @@ type Event struct {
 	Data        map[string]interface{}
 }
 
+func (e *Event) Fields() map[string]interface{} {
+	return e.Data
+}
+
 // Trace isn't something that shows up on the wire; it gets created within
 // Refinery. Traces are not thread-safe; only one goroutine should be working
 // with a trace object at a time.
 type Trace struct {
-	APIHost string
-	APIKey  string
-	Dataset string
-	TraceID string
+	APIHost       string
+	APIKey        string
+	Dataset       string
+	DatasetPrefix string
+	TraceID       string
 
 	// SampleRate should only be changed if the changer holds the SendSampleLock
+	// TODO: remove this field
 	sampleRate uint
 	// KeepSample should only be changed if the changer holds the SendSampleLock
+	// TODO: remove this field
 	KeepSample bool
 	// Sent should only be changed if the changer holds the SendSampleLock
+	// TODO: remove this field
 	Sent       bool
 	sentReason uint
 
@@ -108,6 +123,22 @@ func (t *Trace) GetSpans() map[string]*Span {
 	return t.spans
 }
 
+func (t *Trace) RootFields() Fielder {
+	if t.RootSpan == nil {
+		return nil
+	}
+
+	return t.RootSpan
+}
+
+func (t *Trace) AllFields() []Fielder {
+	res := make([]Fielder, 0, len(t.spans))
+	for _, sp := range t.spans {
+		res = append(res, sp)
+	}
+	return res
+}
+
 func (t *Trace) ID() string {
 	return t.TraceID
 }
@@ -138,8 +169,8 @@ func (t *Trace) DescendantCount() uint32 {
 func (t *Trace) SpanCount() uint32 {
 	var count uint32
 	for _, s := range t.spans {
-		switch s.AnnotationType() {
-		case SpanAnnotationTypeSpanEvent, SpanAnnotationTypeLink:
+		switch s.Type() {
+		case SpanTypeEvent, SpanTypeLink:
 			continue
 		default:
 			count++
@@ -152,7 +183,7 @@ func (t *Trace) SpanCount() uint32 {
 func (t *Trace) SpanLinkCount() uint32 {
 	var count uint32
 	for _, s := range t.spans {
-		if s.AnnotationType() == SpanAnnotationTypeLink {
+		if s.Type() == SpanTypeLink {
 			count++
 		}
 	}
@@ -163,27 +194,31 @@ func (t *Trace) SpanLinkCount() uint32 {
 func (t *Trace) SpanEventCount() uint32 {
 	var count uint32
 	for _, s := range t.spans {
-		if s.AnnotationType() == SpanAnnotationTypeSpanEvent {
+		if s.Type() == SpanTypeEvent {
 			count++
 		}
 	}
 	return count
 }
 
-func (t *Trace) GetSamplerKey() (string, bool) {
+func (t *Trace) GetSamplerSelector(datasetPrefix string) string {
+	var samplerSelector string
 	if IsLegacyAPIKey(t.APIKey) {
-		return t.Dataset, true
+		samplerSelector = t.Dataset
+		if datasetPrefix != "" {
+			samplerSelector = fmt.Sprintf("%s.%s", datasetPrefix, t.Dataset)
+		}
+		return samplerSelector
 	}
 
-	env := ""
 	for _, sp := range t.GetSpans() {
 		if sp.Event.Environment != "" {
-			env = sp.Event.Environment
+			samplerSelector = sp.Event.Environment
 			break
 		}
 	}
+	return samplerSelector
 
-	return env, false
 }
 
 // Calculates the relative start time of each span and missing spans.
@@ -235,6 +270,7 @@ type Span struct {
 	SpanID      string
 	DataSize    int
 	ArrivalTime time.Time
+	IsRoot      bool
 }
 
 // GetDataSize computes the size of the Data element of the Span.
@@ -261,28 +297,28 @@ func (sp *Span) GetDataSize() int {
 	return total
 }
 
-// SpanAnnotationType is an enum for the type of annotation this span is.
-type SpanAnnotationType int
+// SpanType is an enum for the type of annotation this span is.
+type SpanType int
 
 const (
-	// SpanAnnotationTypeUnknown is the default value for an unknown annotation type.
-	SpanAnnotationTypeUnknown SpanAnnotationType = iota
-	// SpanAnnotationTypeSpanEvent is the type for a span event.
-	SpanAnnotationTypeSpanEvent
-	// SpanAnnotationTypeLink is the type for a span link.
-	SpanAnnotationTypeLink
+	// SpanTypeNormal is the default value for an unknown annotation type.
+	SpanTypeNormal SpanType = iota
+	// SpanTypeEvent is the type for a span event.
+	SpanTypeEvent
+	// SpanTypeLink is the type for a span link.
+	SpanTypeLink
 )
 
-// AnnotationType returns the type of annotation this span is.
-func (sp *Span) AnnotationType() SpanAnnotationType {
+// Type returns the type of annotation this span is.
+func (sp *Span) Type() SpanType {
 	t := sp.Data["meta.annotation_type"]
 	switch t {
 	case "span_event":
-		return SpanAnnotationTypeSpanEvent
+		return SpanTypeEvent
 	case "link":
-		return SpanAnnotationTypeLink
+		return SpanTypeLink
 	default:
-		return SpanAnnotationTypeUnknown
+		return SpanTypeNormal
 	}
 }
 
@@ -304,4 +340,14 @@ func (sp *Span) CacheImpact(traceTimeout time.Duration) int {
 
 func IsLegacyAPIKey(apiKey string) bool {
 	return huskyotlp.IsClassicApiKey(apiKey)
+}
+
+func GenerateSpanID() string {
+	id, err := uuid.NewV7()
+	if err != nil {
+		// don't know why we got an error, but we can't do anything about it
+		// so just return a random number
+		return fmt.Sprintf("%016x", rand.Int63())
+	}
+	return id.String()
 }

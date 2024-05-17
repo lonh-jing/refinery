@@ -23,6 +23,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/vmihailenco/msgpack/v5"
 	"google.golang.org/grpc"
+	healthserver "google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
@@ -33,9 +34,9 @@ import (
 
 	"github.com/honeycombio/refinery/collect"
 	"github.com/honeycombio/refinery/config"
+	"github.com/honeycombio/refinery/internal/health"
 	"github.com/honeycombio/refinery/logger"
 	"github.com/honeycombio/refinery/metrics"
-	"github.com/honeycombio/refinery/sharder"
 	"github.com/honeycombio/refinery/transmit"
 	"github.com/honeycombio/refinery/types"
 
@@ -56,11 +57,10 @@ const (
 type Router struct {
 	Config               config.Config         `inject:""`
 	Logger               logger.Logger         `inject:""`
+	Health               health.Reporter       `inject:""`
 	HTTPTransport        *http.Transport       `inject:"upstreamTransport"`
 	UpstreamTransmission transmit.Transmission `inject:"upstreamTransmission"`
-	PeerTransmission     transmit.Transmission `inject:"peerTransmission"`
-	Sharder              sharder.Sharder       `inject:""`
-	Collector            collect.Collector     `inject:""`
+	Collector            collect.Collector     `inject:"collector"`
 	Metrics              metrics.Metrics       `inject:"genericMetrics"`
 
 	// version is set on startup so that the router may answer HTTP requests for
@@ -68,10 +68,6 @@ type Router struct {
 	versionStr string
 
 	proxyClient *http.Client
-
-	// type indicates whether this should listen for incoming events or content
-	// redirected from a peer
-	incomingOrPeer string
 
 	// iopLogger is a logger that knows whether it's incoming or peer
 	iopLogger iopLogger
@@ -81,8 +77,10 @@ type Router struct {
 	server     *http.Server
 	grpcServer *grpc.Server
 	doneWG     sync.WaitGroup
+	donech     chan struct{}
 
 	environmentCache *environmentCache
+	hsrv             *healthserver.Server
 }
 
 type BatchResponse struct {
@@ -115,11 +113,9 @@ func (r *Router) SetVersion(ver string) {
 // initialized as being for either incoming traffic from clients or traffic from
 // a peer. They listen on different addresses so peer traffic can be
 // prioritized.
-func (r *Router) LnS(incomingOrPeer string) {
-	r.incomingOrPeer = incomingOrPeer
+func (r *Router) LnS() {
 	r.iopLogger = iopLogger{
-		Logger:         r.Logger,
-		incomingOrPeer: incomingOrPeer,
+		Logger: r.Logger,
 	}
 
 	r.proxyClient = &http.Client{
@@ -135,13 +131,15 @@ func (r *Router) LnS(incomingOrPeer string) {
 		return
 	}
 
-	r.Metrics.Register(r.incomingOrPeer+"_router_proxied", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_event", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_batch", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_nonspan", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_span", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_peer", "counter")
-	r.Metrics.Register(r.incomingOrPeer+"_router_dropped", "counter")
+	r.Metrics.Register("incoming_router_proxied", "counter")
+	r.Metrics.Register("incoming_router_event", "counter")
+	r.Metrics.Register("incoming_router_batch", "counter")
+	r.Metrics.Register("incoming_router_nonspan", "counter")
+	r.Metrics.Register("incoming_router_span", "counter")
+	r.Metrics.Register("incoming_router_peer", "counter")
+	r.Metrics.Register("incoming_router_dropped", "counter")
+	r.Metrics.Register("is_alive", "gauge")
+	r.Metrics.Register("is_ready", "gauge")
 
 	muxxer := mux.NewRouter()
 
@@ -151,6 +149,7 @@ func (r *Router) LnS(incomingOrPeer string) {
 
 	// answer a basic health check locally
 	muxxer.HandleFunc("/alive", r.alive).Name("local health")
+	muxxer.HandleFunc("/ready", r.ready).Name("local readiness")
 	muxxer.HandleFunc("/panic", r.panic).Name("intentional panic")
 	muxxer.HandleFunc("/version", r.version).Name("report version info")
 
@@ -177,25 +176,16 @@ func (r *Router) LnS(incomingOrPeer string) {
 	// pass everything else through unmolested
 	muxxer.PathPrefix("/").HandlerFunc(r.proxy).Name("proxy")
 
-	var listenAddr, grpcAddr string
-	if r.incomingOrPeer == "incoming" {
-		listenAddr, err = r.Config.GetListenAddr()
-		if err != nil {
-			r.iopLogger.Error().Logf("failed to get listen addr config: %s", err)
-			return
-		}
-		// GRPC listen addr is optional, err means addr was not empty and invalid
-		grpcAddr, err = r.Config.GetGRPCListenAddr()
-		if err != nil {
-			r.iopLogger.Error().Logf("failed to get grpc listen addr config: %s", err)
-			return
-		}
-	} else {
-		listenAddr, err = r.Config.GetPeerListenAddr()
-		if err != nil {
-			r.iopLogger.Error().Logf("failed to get peer listen addr config: %s", err)
-			return
-		}
+	listenAddr := r.Config.GetListenAddr()
+	if err != nil {
+		r.iopLogger.Error().Logf("failed to get listen addr config: %s", err)
+		return
+	}
+	// GRPC listen addr is optional, err means addr was not empty and invalid
+	grpcAddr := r.Config.GetGRPCListenAddr()
+	if err != nil {
+		r.iopLogger.Error().Logf("failed to get grpc listen addr config: %s", err)
+		return
 	}
 
 	r.iopLogger.Info().Logf("Listening on %s", listenAddr)
@@ -205,6 +195,7 @@ func (r *Router) LnS(incomingOrPeer string) {
 		IdleTimeout: r.Config.GetHTTPIdleTimeout(),
 	}
 
+	r.donech = make(chan struct{})
 	if r.Config.GetGRPCEnabled() && len(grpcAddr) > 0 {
 		l, err := net.Listen("tcp", grpcAddr)
 		if err != nil {
@@ -227,7 +218,12 @@ func (r *Router) LnS(incomingOrPeer string) {
 		traceServer := NewTraceServer(r)
 		r.grpcServer = grpc.NewServer(serverOpts...)
 		collectortrace.RegisterTraceServiceServer(r.grpcServer, traceServer)
-		grpc_health_v1.RegisterHealthServer(r.grpcServer, r)
+
+		// health check -- manufactured by grpc health package
+		r.hsrv = healthserver.NewServer()
+		grpc_health_v1.RegisterHealthServer(r.grpcServer, r.hsrv)
+		go r.healthchecker()
+
 		go r.grpcServer.Serve(l)
 	}
 
@@ -253,13 +249,35 @@ func (r *Router) Stop() error {
 	if r.grpcServer != nil {
 		r.grpcServer.GracefulStop()
 	}
+	close(r.donech)
 	r.doneWG.Wait()
 	return nil
 }
 
 func (r *Router) alive(w http.ResponseWriter, req *http.Request) {
-	r.iopLogger.Debug().Logf("answered /x/alive check")
-	w.Write([]byte(`{"source":"refinery","alive":"yes"}`))
+	r.iopLogger.Debug().Logf("answered /alive check")
+
+	alive := r.Health.IsAlive()
+	r.Metrics.Gauge("is_alive", alive)
+	if !alive {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		r.marshalToFormat(w, map[string]interface{}{"source": "refinery", "alive": "no"}, "json")
+		return
+	}
+	r.marshalToFormat(w, map[string]interface{}{"source": "refinery", "alive": "yes"}, "json")
+}
+
+func (r *Router) ready(w http.ResponseWriter, req *http.Request) {
+	r.iopLogger.Debug().Logf("answered /ready check")
+
+	ready := r.Health.IsReady()
+	r.Metrics.Gauge("is_ready", ready)
+	if !ready {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		r.marshalToFormat(w, map[string]interface{}{"source": "refinery", "ready": "no"}, "json")
+		return
+	}
+	r.marshalToFormat(w, map[string]interface{}{"source": "refinery", "ready": "yes"}, "json")
 }
 
 func (r *Router) panic(w http.ResponseWriter, req *http.Request) {
@@ -272,8 +290,7 @@ func (r *Router) version(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) debugTrace(w http.ResponseWriter, req *http.Request) {
 	traceID := mux.Vars(req)["traceID"]
-	shard := r.Sharder.WhichShard(traceID)
-	w.Write([]byte(fmt.Sprintf(`{"traceID":"%s","node":"%s"}`, traceID, shard.GetAddress())))
+	w.Write([]byte(fmt.Sprintf(`{"traceID":"%s"}`, traceID)))
 }
 
 func (r *Router) getSamplerRules(w http.ResponseWriter, req *http.Request) {
@@ -290,12 +307,7 @@ func (r *Router) getSamplerRules(w http.ResponseWriter, req *http.Request) {
 
 func (r *Router) getAllSamplerRules(w http.ResponseWriter, req *http.Request) {
 	format := strings.ToLower(mux.Vars(req)["format"])
-	cfgs, err := r.Config.GetAllSamplerRules()
-	if err != nil {
-		w.Write([]byte(fmt.Sprintf("got error %v trying to fetch configs", err)))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	cfgs := r.Config.GetAllSamplerRules()
 	r.marshalToFormat(w, cfgs, format)
 }
 
@@ -340,7 +352,7 @@ func (r *Router) marshalToFormat(w http.ResponseWriter, obj interface{}, format 
 
 // event is handler for /1/event/
 func (r *Router) event(w http.ResponseWriter, req *http.Request) {
-	r.Metrics.Increment(r.incomingOrPeer + "_router_event")
+	r.Metrics.Increment("incoming_router_event")
 	defer req.Body.Close()
 
 	bodyReader, err := r.getMaybeCompressedBody(req)
@@ -382,11 +394,7 @@ func (r *Router) requestToEvent(req *http.Request, reqBod []byte) (*types.Event,
 	eventTime := getEventTime(req.Header.Get(types.TimestampHeader))
 	vars := mux.Vars(req)
 	dataset := vars["datasetName"]
-
-	apiHost, err := r.Config.GetHoneycombAPI()
-	if err != nil {
-		return nil, err
-	}
+	apiHost := r.Config.GetHoneycombAPI()
 
 	// get environment name - will be empty for legacy keys
 	environment, err := r.getEnvironmentName(apiKey)
@@ -413,7 +421,7 @@ func (r *Router) requestToEvent(req *http.Request, reqBod []byte) (*types.Event,
 }
 
 func (r *Router) batch(w http.ResponseWriter, req *http.Request) {
-	r.Metrics.Increment(r.incomingOrPeer + "_router_batch")
+	r.Metrics.Increment("incoming_router_batch")
 	defer req.Body.Close()
 
 	reqID := req.Context().Value(types.RequestIDContextKey{})
@@ -511,14 +519,25 @@ func (r *Router) processEvent(ev *types.Event, reqID interface{}) error {
 	}
 	if traceID == "" {
 		// not part of a trace. send along upstream
-		r.Metrics.Increment(r.incomingOrPeer + "_router_nonspan")
+		r.Metrics.Increment("incoming_router_nonspan")
 		debugLog.WithString("api_host", ev.APIHost).
 			WithString("dataset", ev.Dataset).
 			Logf("sending non-trace event from batch")
 		r.UpstreamTransmission.EnqueueEvent(ev)
 		return nil
 	}
-	debugLog = debugLog.WithString("trace_id", traceID)
+
+	uniqueID := types.GenerateSpanID()
+	debugLog = debugLog.WithString("trace_id", traceID).WithString("unique_id", uniqueID)
+
+	// check if this is a root span; if we can't find a parent ID, it is.
+	isRoot := true
+	for _, parentIdFieldName := range r.Config.GetParentIdFieldNames() {
+		if _, hasParent := ev.Data[parentIdFieldName]; hasParent {
+			isRoot = false
+			break
+		}
+	}
 
 	// extract parent ID
 	var parentID string
@@ -540,65 +559,35 @@ func (r *Router) processEvent(ev *types.Event, reqID interface{}) error {
 		TraceID:  traceID,
 		ParentID: parentID,
 		SpanID:   spanID,
+		IsRoot:   isRoot,
 	}
 
 	// we know we're a span, but we need to check if we're in Stress Relief mode;
-	// if we are, then we want to make an immediate, deterministic trace decision
-	// and either drop or send the trace without even trying to cache or forward it.
-	isProbe := false
+	// if we are, then we hash the trace ID to determine if we should process it immediately
+	// based on the hash and current stress levels.
+	// The decision is only saved in the in-memory cache so that we can make the same decision
+	// for all spans in the same trace.
+	// If it's not a trace we should process immediately, we'll add it to the collector
 	if r.Collector.Stressed() {
-		rate, keep, reason := r.Collector.GetStressedSampleRate(traceID)
-
-		r.Collector.ProcessSpanImmediately(span, keep, rate, reason)
-
-		if !keep {
+		processed, err := r.Collector.ProcessSpanImmediately(span)
+		if err != nil {
+			return err
+		}
+		if processed {
 			return nil
 		}
-		// If the span was kept, we want to generate a probe that we'll forward
-		// to a peer IF this span would have been forwarded.
-		ev.Data["meta.refinery.probe"] = true
-		isProbe = true
-	}
-
-	// Figure out if we should handle this span locally or pass on to a peer
-	targetShard := r.Sharder.WhichShard(traceID)
-	if r.incomingOrPeer == "incoming" && !targetShard.Equals(r.Sharder.MyShard()) {
-		r.Metrics.Increment(r.incomingOrPeer + "_router_peer")
-		debugLog.
-			WithString("peer", targetShard.GetAddress()).
-			WithField("isprobe", isProbe).
-			Logf("Sending span from batch to peer")
-		ev.APIHost = targetShard.GetAddress()
-
-		// Unfortunately this doesn't tell us if the event was actually
-		// enqueued; we need to watch the response channel to find out, at
-		// which point it's too late to tell the client.
-		r.PeerTransmission.EnqueueEvent(ev)
-		return nil
-	}
-
-	if isProbe {
-		// If we got here it's because the span we were using for a probe was
-		// intended for us, so just skip it.
-		return nil
 	}
 
 	// we're supposed to handle it normally
-	var err error
-	if r.incomingOrPeer == "incoming" {
-		err = r.Collector.AddSpan(span)
-	} else {
-		err = r.Collector.AddSpanFromPeer(span)
-	}
-	if err != nil {
-		r.Metrics.Increment(r.incomingOrPeer + "_router_dropped")
+	if err := r.Collector.AddSpan(span); err != nil {
+		r.Metrics.Increment("incoming_router_dropped")
 		debugLog.Logf("Dropping span from batch, channel full")
 		return err
 	}
 
-	r.Metrics.Increment(r.incomingOrPeer + "_router_span")
+	r.Metrics.Increment("incoming_router_span")
 
-	debugLog.WithField("source", r.incomingOrPeer).Logf("Accepting span from batch for collection into a trace")
+	debugLog.WithField("source", "incoming").Logf("Accepting span from batch for collection into a trace")
 	return nil
 }
 
@@ -650,10 +639,7 @@ func (r *Router) batchedEventToEvent(req *http.Request, bev batchedEvent, apiKey
 	// once for the entire batch instead of in every event.
 	vars := mux.Vars(req)
 	dataset := vars["datasetName"]
-	apiHost, err := r.Config.GetHoneycombAPI()
-	if err != nil {
-		return nil, err
-	}
+	apiHost := r.Config.GetHoneycombAPI()
 	return &types.Event{
 		Context:     req.Context(),
 		APIHost:     apiHost,
@@ -799,10 +785,19 @@ type cacheItem struct {
 // get queries the cached items, returning cache hits that have not expired.
 // Cache missed use the configured getFn to populate the cache.
 func (c *environmentCache) get(key string) (string, error) {
+	var val string
+	// get read lock so that we don't attempt to read from the map
+	// while another routine has a write lock and is actively writing
+	// to the map.
+	c.mutex.RLock()
 	if item, ok := c.items[key]; ok {
 		if time.Now().Before(item.expiresAt) {
-			return item.value, nil
+			val = item.value
 		}
+	}
+	c.mutex.RUnlock()
+	if val != "" {
+		return val, nil
 	}
 
 	// get write lock early so we don't execute getFn in parallel so the
@@ -864,10 +859,7 @@ func (r *Router) getEnvironmentName(apiKey string) (string, error) {
 }
 
 func (r *Router) lookupEnvironment(apiKey string) (string, error) {
-	apiEndpoint, err := r.Config.GetHoneycombAPI()
-	if err != nil {
-		return "", fmt.Errorf("failed to read Honeycomb API config value. %w", err)
-	}
+	apiEndpoint := r.Config.GetHoneycombAPI()
 	authURL, err := url.Parse(apiEndpoint)
 	if err != nil {
 		return "", fmt.Errorf("failed to parse Honeycomb API URL config value. %w", err)
@@ -903,18 +895,42 @@ func (r *Router) lookupEnvironment(apiKey string) (string, error) {
 	return authinfo.Environment.Name, nil
 }
 
-func (r *Router) Check(ctx context.Context, req *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
-	r.iopLogger.Debug().Logf("answered grpc_health_v1 check")
-	return &grpc_health_v1.HealthCheckResponse{
-		Status: grpc_health_v1.HealthCheckResponse_SERVING,
-	}, nil
-}
+// healthchecker is a goroutine that periodically checks the health of the system and updates the grpc health server
+func (r *Router) healthchecker() {
+	const (
+		system      = "" // empty string represents the generic health of the whole system (corresponds to "ready")
+		systemReady = "ready"
+		systemAlive = "alive"
+	)
+	r.iopLogger.Debug().Logf("running grpc health monitor")
 
-func (r *Router) Watch(req *grpc_health_v1.HealthCheckRequest, server grpc_health_v1.Health_WatchServer) error {
-	r.iopLogger.Debug().Logf("serving grpc_health_v1 watch")
-	return server.Send(&grpc_health_v1.HealthCheckResponse{
-		Status: grpc_health_v1.HealthCheckResponse_SERVING,
-	})
+	setStatus := func(svc string, stat bool) {
+		if stat {
+			r.hsrv.SetServingStatus(svc, grpc_health_v1.HealthCheckResponse_SERVING)
+		} else {
+			r.hsrv.SetServingStatus(svc, grpc_health_v1.HealthCheckResponse_NOT_SERVING)
+		}
+	}
+
+	go func() {
+		// TODO: Does this time need to be configurable?
+		watchticker := time.NewTicker(3 * time.Second)
+		defer watchticker.Stop()
+		for {
+			select {
+			case <-watchticker.C:
+				alive := r.Health.IsAlive()
+				ready := r.Health.IsReady()
+
+				// we can just update everything because the grpc health server will only send updates if the status changes
+				setStatus(systemReady, ready)
+				setStatus(systemAlive, alive)
+				setStatus(system, ready && alive)
+			case <-r.donech:
+				return
+			}
+		}
+	}()
 }
 
 // AddOTLPMuxxer adds muxxer for OTLP requests

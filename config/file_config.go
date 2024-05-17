@@ -59,6 +59,7 @@ type configContents struct {
 	PrometheusMetrics    PrometheusMetricsConfig   `yaml:"PrometheusMetrics"`
 	LegacyMetrics        LegacyMetricsConfig       `yaml:"LegacyMetrics"`
 	OTelMetrics          OTelMetricsConfig         `yaml:"OTelMetrics"`
+	OTelTracing          OTelTracingConfig         `yaml:"OTelTracing"`
 	PeerManagement       PeerManagementConfig      `yaml:"PeerManagement"`
 	RedisPeerManagement  RedisPeerManagementConfig `yaml:"RedisPeerManagement"`
 	Collection           CollectionConfig          `yaml:"Collection"`
@@ -68,6 +69,7 @@ type configContents struct {
 	GRPCServerParameters GRPCServerParameters      `yaml:"GRPCServerParameters"`
 	SampleCache          SampleCacheConfig         `yaml:"SampleCache"`
 	StressRelief         StressReliefConfig        `yaml:"StressRelief"`
+	CentralStore         SmartWrapperOptions       `yaml:"CentralStore"`
 }
 
 type GeneralConfig struct {
@@ -183,6 +185,14 @@ type OTelMetricsConfig struct {
 	ReportingInterval Duration `yaml:"ReportingInterval" default:"30s"`
 }
 
+type OTelTracingConfig struct {
+	Type       string `yaml:"Type" default:"none"`
+	APIHost    string `yaml:"APIHost" default:"https://api.honeycomb.io"`
+	APIKey     string `yaml:"APIKey" cmdenv:"OTelTracesAPIKey,HoneycombAPIKey"`
+	Dataset    string `yaml:"Dataset" default:"Refinery Traces"`
+	SampleRate uint64 `yaml:"SampleRate" default:"100"`
+}
+
 type PeerManagementConfig struct {
 	Type                    string   `yaml:"Type" default:"file"`
 	Identifier              string   `yaml:"Identifier"`
@@ -192,25 +202,54 @@ type PeerManagementConfig struct {
 }
 
 type RedisPeerManagementConfig struct {
-	Host           string   `yaml:"Host" cmdenv:"RedisHost"`
-	Username       string   `yaml:"Username" cmdenv:"RedisUsername"`
-	Password       string   `yaml:"Password" cmdenv:"RedisPassword"`
-	AuthCode       string   `yaml:"AuthCode" cmdenv:"RedisAuthCode"`
-	Prefix         string   `yaml:"Prefix" default:"refinery"`
-	Database       int      `yaml:"Database"`
-	UseTLS         bool     `yaml:"UseTLS" `
-	UseTLSInsecure bool     `yaml:"UseTLSInsecure" `
-	Timeout        Duration `yaml:"Timeout" default:"5s"`
+	Host             string   `yaml:"Host" cmdenv:"RedisHost"`
+	Username         string   `yaml:"Username" cmdenv:"RedisUsername"`
+	Password         string   `yaml:"Password" cmdenv:"RedisPassword"`
+	AuthCode         string   `yaml:"AuthCode" cmdenv:"RedisAuthCode"`
+	Database         int      `yaml:"Database"`
+	UseTLS           bool     `yaml:"UseTLS" `
+	UseTLSInsecure   bool     `yaml:"UseTLSInsecure" `
+	Timeout          Duration `yaml:"Timeout" default:"5s"`
+	Prefix           string   `yaml:"Prefix" default:"refinery"`
+	MaxIdle          int      `yaml:"MaxIdle" default:"30"`
+	MaxActive        int      `yaml:"MaxActive" default:"30"`
+	Parallelism      int      `yaml:"Parallelism" default:"10"`
+	MetricsCycleRate Duration `yaml:"MetricsCycleRate" default:"1m"`
 }
 
 type CollectionConfig struct {
-	// CacheCapacity must be less than math.MaxInt32
-	CacheCapacity       int        `yaml:"CacheCapacity" default:"10_000"`
-	PeerQueueSize       int        `yaml:"PeerQueueSize"`
-	IncomingQueueSize   int        `yaml:"IncomingQueueSize"`
-	AvailableMemory     MemorySize `yaml:"AvailableMemory" cmdenv:"AvailableMemory"`
-	MaxMemoryPercentage int        `yaml:"MaxMemoryPercentage" default:"75"`
-	MaxAlloc            MemorySize `yaml:"MaxAlloc"`
+	CacheCapacity           int        `yaml:"CacheCapacity" default:"10_000"`
+	IncomingQueueSize       int        `yaml:"IncomingQueueSize"`
+	TraceFetcherConcurrency int        `yaml:"TraceFetcherConcurrency" default:"10"`
+	SenderBatchSize         int        `yaml:"SenderBatchSize" default:"1000"`
+	SenderCycleDuration     Duration   `yaml:"SenderCycleDuration" default:"100ms"`
+	DeciderCycleDuration    Duration   `yaml:"DeciderCycleDuration" default:"100ms"`
+	DeciderBatchSize        int        `yaml:"DeciderBatchSize" default:"1000"`
+	AvailableMemory         MemorySize `yaml:"AvailableMemory" cmdenv:"AvailableMemory"`
+	MaxMemoryPercentage     int        `yaml:"MaxMemoryPercentage" default:"75"`
+	MaxAlloc                MemorySize `yaml:"MaxAlloc"`
+	ShutdownDelay           Duration   `yaml:"ShutdownDelay" default:"30s"`
+	MemoryCycleDuration     Duration   `yaml:"MemoryCycleDuration" default:"10s"`
+}
+
+type SmartWrapperOptions struct {
+	BasicStoreType     string   `yaml:"Type" default:"local"`
+	SpanChannelSize    int      `yaml:"SpanChannelSize" default:"100"`
+	WriteSpanBatchSize int      `yaml:"WriteSpanBatchSize" default:"20"`
+	StateTicker        Duration `yaml:"StateTicker" default:"1s"`
+	StateBatchSize     int      `yaml:"StateBatchSize" default:"400"`
+	SendDelay          Duration `yaml:"SendDelay" default:"2s"`
+	TraceTimeout       Duration `yaml:"TraceTimeout" default:"60s"`
+	DecisionTimeout    Duration `yaml:"DecisionTimeout" default:"3s"`
+	ReaperRunInterval  Duration `yaml:"ReaperRunInterval" default:"10s"`
+	ReaperBatchSize    int      `yaml:"ReaperBatchSize" default:"500"`
+}
+
+func (c CollectionConfig) GetShutdownDelay() time.Duration {
+	if c.ShutdownDelay == 0 {
+		return 30 * time.Second
+	}
+	return time.Duration(c.ShutdownDelay)
 }
 
 // GetMaxAlloc returns the maximum amount of memory to use for the cache.
@@ -222,16 +261,6 @@ func (c CollectionConfig) GetMaxAlloc() MemorySize {
 	return c.AvailableMemory * MemorySize(c.MaxMemoryPercentage) / 100
 }
 
-// GetPeerBufferCapacity returns the capacity of the in-memory channel for peer traces.
-// If PeerBufferCapacity is not set, it uses 3x the cache capacity.
-// The minimum value is 3x the cache capacity.
-func (c CollectionConfig) GetPeerQueueSize() int {
-	if c.PeerQueueSize == 0 || c.PeerQueueSize < c.CacheCapacity*3 {
-		return c.CacheCapacity * 3
-	}
-	return c.PeerQueueSize
-}
-
 // GetIncomingBufferCapacity returns the capacity of the in-memory channel for incoming traces.
 // If IncomingBufferCapacity is not set, it uses 3x the cache capacity.
 // The minimum value is 3x the cache capacity.
@@ -240,6 +269,28 @@ func (c CollectionConfig) GetIncomingQueueSize() int {
 		return c.CacheCapacity * 3
 	}
 	return c.IncomingQueueSize
+}
+
+func (c CollectionConfig) GetSenderBatchSize() int {
+	if c.SenderBatchSize == 0 {
+		return 50
+	}
+	return c.SenderBatchSize
+}
+
+func (c CollectionConfig) GetSenderCycleDuration() time.Duration {
+	return time.Duration(c.SenderCycleDuration)
+}
+
+func (c CollectionConfig) GetDeciderCycleDuration() time.Duration {
+	return time.Duration(c.DeciderCycleDuration)
+}
+
+func (c CollectionConfig) GetDeciderBatchSize() int {
+	if c.DeciderBatchSize == 0 {
+		return 50
+	}
+	return c.DeciderBatchSize
 }
 
 type BufferSizeConfig struct {
@@ -256,6 +307,7 @@ type SpecializedConfig struct {
 type IDFieldsConfig struct {
 	TraceNames  []string `yaml:"TraceNames" default:"[\"trace.trace_id\",\"traceId\"]"`
 	ParentNames []string `yaml:"ParentNames" default:"[\"trace.parent_id\",\"parentId\"]"`
+	SpanNames   []string `yaml:"SpanNames" default:"[\"span.span_id\",\"spanId\"]"`
 }
 
 // GRPCServerParameters allow you to configure the GRPC ServerParameters used
@@ -476,26 +528,22 @@ func (f *fileConfig) RegisterReloadCallback(cb func()) {
 	f.callbacks = append(f.callbacks, cb)
 }
 
-func (f *fileConfig) GetListenAddr() (string, error) {
+func (f *fileConfig) GetListenAddr() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
 	_, _, err := net.SplitHostPort(f.mainConfig.Network.ListenAddr)
 	if err != nil {
-		return "", err
+		return ""
 	}
-	return f.mainConfig.Network.ListenAddr, nil
+	return f.mainConfig.Network.ListenAddr
 }
 
-func (f *fileConfig) GetPeerListenAddr() (string, error) {
+func (f *fileConfig) GetPeerListenAddr() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	_, _, err := net.SplitHostPort(f.mainConfig.Network.PeerListenAddr)
-	if err != nil {
-		return "", err
-	}
-	return f.mainConfig.Network.PeerListenAddr, nil
+	return f.mainConfig.Network.PeerListenAddr
 }
 
 func (f *fileConfig) GetHTTPIdleTimeout() time.Duration {
@@ -519,18 +567,11 @@ func (f *fileConfig) GetGRPCEnabled() bool {
 	return f.mainConfig.GRPCServerParameters.Enabled.Get()
 }
 
-func (f *fileConfig) GetGRPCListenAddr() (string, error) {
+func (f *fileConfig) GetGRPCListenAddr() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	// GRPC listen addr is optional, only check value is valid if not empty
-	if f.mainConfig.GRPCServerParameters.ListenAddr != "" {
-		_, _, err := net.SplitHostPort(f.mainConfig.GRPCServerParameters.ListenAddr)
-		if err != nil {
-			return "", err
-		}
-	}
-	return f.mainConfig.GRPCServerParameters.ListenAddr, nil
+	return f.mainConfig.GRPCServerParameters.ListenAddr
 }
 
 func (f *fileConfig) GetGRPCConfig() GRPCServerParameters {
@@ -556,32 +597,32 @@ func (f *fileConfig) IsAPIKeyValid(key string) bool {
 	return f.mainConfig.AccessKeys.keymap.Contains(key)
 }
 
-func (f *fileConfig) GetPeerManagementType() (string, error) {
+func (f *fileConfig) GetPeerManagementType() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.PeerManagement.Type, nil
+	return f.mainConfig.PeerManagement.Type
 }
 
-func (f *fileConfig) GetPeers() ([]string, error) {
+func (f *fileConfig) GetPeers() []string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.PeerManagement.Peers, nil
+	return f.mainConfig.PeerManagement.Peers
 }
 
-func (f *fileConfig) GetRedisHost() (string, error) {
+func (f *fileConfig) GetRedisHost() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.Host, nil
+	return f.mainConfig.RedisPeerManagement.Host
 }
 
-func (f *fileConfig) GetRedisUsername() (string, error) {
+func (f *fileConfig) GetRedisUsername() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.Username, nil
+	return f.mainConfig.RedisPeerManagement.Username
 }
 
 func (f *fileConfig) GetRedisPrefix() string {
@@ -591,18 +632,18 @@ func (f *fileConfig) GetRedisPrefix() string {
 	return f.mainConfig.RedisPeerManagement.Prefix
 }
 
-func (f *fileConfig) GetRedisPassword() (string, error) {
+func (f *fileConfig) GetRedisPassword() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.Password, nil
+	return f.mainConfig.RedisPeerManagement.Password
 }
 
-func (f *fileConfig) GetRedisAuthCode() (string, error) {
+func (f *fileConfig) GetRedisAuthCode() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.AuthCode, nil
+	return f.mainConfig.RedisPeerManagement.AuthCode
 }
 
 func (f *fileConfig) GetRedisDatabase() int {
@@ -612,46 +653,74 @@ func (f *fileConfig) GetRedisDatabase() int {
 	return f.mainConfig.RedisPeerManagement.Database
 }
 
-func (f *fileConfig) GetUseTLS() (bool, error) {
+func (f *fileConfig) GetUseTLS() bool {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.UseTLS, nil
+	return f.mainConfig.RedisPeerManagement.UseTLS
 }
 
-func (f *fileConfig) GetUseTLSInsecure() (bool, error) {
+func (f *fileConfig) GetUseTLSInsecure() bool {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.RedisPeerManagement.UseTLSInsecure, nil
+	return f.mainConfig.RedisPeerManagement.UseTLSInsecure
 }
 
-func (f *fileConfig) GetIdentifierInterfaceName() (string, error) {
+func (f *fileConfig) GetParallelism() int {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.PeerManagement.IdentifierInterfaceName, nil
+	return f.mainConfig.RedisPeerManagement.Parallelism
 }
 
-func (f *fileConfig) GetUseIPV6Identifier() (bool, error) {
+func (f *fileConfig) GetRedisMetricsCycleRate() time.Duration {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.PeerManagement.UseIPV6Identifier, nil
+	return time.Duration(f.mainConfig.RedisPeerManagement.MetricsCycleRate)
 }
 
-func (f *fileConfig) GetRedisIdentifier() (string, error) {
+func (f *fileConfig) GetIdentifierInterfaceName() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.PeerManagement.Identifier, nil
+	return f.mainConfig.PeerManagement.IdentifierInterfaceName
 }
 
-func (f *fileConfig) GetHoneycombAPI() (string, error) {
+func (f *fileConfig) GetUseIPV6Identifier() bool {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.Network.HoneycombAPI, nil
+	return f.mainConfig.PeerManagement.UseIPV6Identifier
+}
+
+func (f *fileConfig) GetRedisIdentifier() string {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return f.mainConfig.PeerManagement.Identifier
+}
+
+func (f *fileConfig) GetRedisMaxActive() int {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return f.mainConfig.RedisPeerManagement.MaxActive
+}
+
+func (f *fileConfig) GetRedisMaxIdle() int {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return f.mainConfig.RedisPeerManagement.MaxIdle
+}
+
+func (f *fileConfig) GetHoneycombAPI() string {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return f.mainConfig.Network.HoneycombAPI
 }
 
 func (f *fileConfig) GetLoggerLevel() Level {
@@ -661,33 +730,33 @@ func (f *fileConfig) GetLoggerLevel() Level {
 	return f.mainConfig.Logger.Level
 }
 
-func (f *fileConfig) GetLoggerType() (string, error) {
+func (f *fileConfig) GetLoggerType() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.Logger.Type, nil
+	return f.mainConfig.Logger.Type
 }
 
-func (f *fileConfig) GetHoneycombLoggerConfig() (HoneycombLoggerConfig, error) {
+func (f *fileConfig) GetHoneycombLoggerConfig() HoneycombLoggerConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.HoneycombLogger, nil
+	return f.mainConfig.HoneycombLogger
 }
 
-func (f *fileConfig) GetStdoutLoggerConfig() (StdoutLoggerConfig, error) {
+func (f *fileConfig) GetStdoutLoggerConfig() StdoutLoggerConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.StdoutLogger, nil
+	return f.mainConfig.StdoutLogger
 }
 
-func (f *fileConfig) GetAllSamplerRules() (*V2SamplerConfig, error) {
+func (f *fileConfig) GetAllSamplerRules() *V2SamplerConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
 	// This is probably good enough for debug; if not we can extend it.
-	return f.rulesConfig, nil
+	return f.rulesConfig
 }
 
 // GetSamplerConfigForDestName returns the sampler config for the given
@@ -715,11 +784,11 @@ func (f *fileConfig) GetSamplerConfigForDestName(destname string) (any, string, 
 	return cfg, name, err
 }
 
-func (f *fileConfig) GetCollectionConfig() (CollectionConfig, error) {
+func (f *fileConfig) GetCollectionConfig() CollectionConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return f.mainConfig.Collection, nil
+	return f.mainConfig.Collection
 }
 
 func (f *fileConfig) GetLegacyMetricsConfig() LegacyMetricsConfig {
@@ -743,11 +812,18 @@ func (f *fileConfig) GetOTelMetricsConfig() OTelMetricsConfig {
 	return f.mainConfig.OTelMetrics
 }
 
-func (f *fileConfig) GetSendDelay() (time.Duration, error) {
+func (f *fileConfig) GetOTelTracingConfig() OTelTracingConfig {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return time.Duration(f.mainConfig.Traces.SendDelay), nil
+	return f.mainConfig.OTelTracing
+}
+
+func (f *fileConfig) GetSendDelay() time.Duration {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return time.Duration(f.mainConfig.Traces.SendDelay)
 }
 
 func (f *fileConfig) GetBatchTimeout() time.Duration {
@@ -757,11 +833,11 @@ func (f *fileConfig) GetBatchTimeout() time.Duration {
 	return time.Duration(f.mainConfig.Traces.BatchTimeout)
 }
 
-func (f *fileConfig) GetTraceTimeout() (time.Duration, error) {
+func (f *fileConfig) GetTraceTimeout() time.Duration {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	return time.Duration(f.mainConfig.Traces.TraceTimeout), nil
+	return time.Duration(f.mainConfig.Traces.TraceTimeout)
 }
 
 func (f *fileConfig) GetMaxBatchSize() uint {
@@ -792,15 +868,11 @@ func (f *fileConfig) GetSendTickerValue() time.Duration {
 	return time.Duration(f.mainConfig.Traces.SendTicker)
 }
 
-func (f *fileConfig) GetDebugServiceAddr() (string, error) {
+func (f *fileConfig) GetDebugServiceAddr() string {
 	f.mux.RLock()
 	defer f.mux.RUnlock()
 
-	_, _, err := net.SplitHostPort(f.mainConfig.Debugging.DebugServiceAddr)
-	if err != nil {
-		return "", err
-	}
-	return f.mainConfig.Debugging.DebugServiceAddr, nil
+	return f.mainConfig.Debugging.DebugServiceAddr
 }
 
 func (f *fileConfig) GetIsDryRun() bool {
@@ -923,4 +995,11 @@ func (f *fileConfig) GetAdditionalAttributes() map[string]string {
 	defer f.mux.RUnlock()
 
 	return f.mainConfig.Specialized.AdditionalAttributes
+}
+
+func (f *fileConfig) GetCentralStoreOptions() SmartWrapperOptions {
+	f.mux.RLock()
+	defer f.mux.RUnlock()
+
+	return f.mainConfig.CentralStore
 }

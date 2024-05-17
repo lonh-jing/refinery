@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/honeycombio/refinery/generics"
 )
 
 // Define some constants for rule comparison operators
@@ -81,39 +83,35 @@ func (v *V2SamplerChoice) Sampler() (any, string) {
 // because the way that sample rates are computed has changed. It's used
 // by the rules converter.
 func (v *V2SamplerChoice) NameMeaningfulSamplers() []string {
-	names := make(map[string]struct{})
+	names := generics.NewSet[string]()
 	switch {
 	case v.DeterministicSampler != nil:
-		names["DeterministicSampler"] = struct{}{}
+		names.Add("DeterministicSampler")
 	case v.RulesBasedSampler != nil:
 		for _, rule := range v.RulesBasedSampler.Rules {
 			if rule.Sampler != nil {
 				if rule.SampleRate > 1 {
-					names[fmt.Sprintf("RulesBasedSampler(%s)", rule.Name)] = struct{}{}
+					names.Add(fmt.Sprintf("RulesBasedSampler(%s)", rule.Name))
 				} else if rule.Sampler.NameMeaningfulRate() != "" {
-					names[fmt.Sprintf("RulesBasedSampler(%s, downstream Sampler %s)", rule.Name, rule.Sampler.NameMeaningfulRate())] = struct{}{}
+					names.Add(fmt.Sprintf("RulesBasedSampler(%s, downstream Sampler %s)", rule.Name, rule.Sampler.NameMeaningfulRate()))
 				}
 			}
 		}
 	case v.DynamicSampler != nil:
-		names["DynamicSampler"] = struct{}{}
+		names.Add("DynamicSampler")
 	case v.EMADynamicSampler != nil:
-		names["EMADynamicSampler"] = struct{}{}
+		names.Add("EMADynamicSampler")
 	case v.EMAThroughputSampler != nil:
-		names["EMAThroughputSampler"] = struct{}{}
+		names.Add("EMAThroughputSampler")
 	case v.WindowedThroughputSampler != nil:
-		names["WindowedThroughputSampler"] = struct{}{}
+		names.Add("WindowedThroughputSampler")
 	case v.TotalThroughputSampler != nil:
-		names["TotalThroughputSampler"] = struct{}{}
+		names.Add("TotalThroughputSampler")
 	default:
 		return nil
 	}
 
-	r := make([]string, 0, len(names))
-	for name := range names {
-		r = append(r, name)
-	}
-	return r
+	return names.Members()
 }
 
 func (v *RulesBasedDownstreamSampler) NameMeaningfulRate() string {
@@ -147,9 +145,30 @@ type V2SamplerConfig struct {
 	Samplers     map[string]*V2SamplerChoice `json:"samplers" yaml:"Samplers,omitempty" validate:"required"`
 }
 
+type GetSamplingFielder interface {
+	GetSamplingFields() []string
+}
+
+var _ GetSamplingFielder = (*DeterministicSamplerConfig)(nil)
+
 type DeterministicSamplerConfig struct {
 	SampleRate int `json:"samplerate" yaml:"SampleRate,omitempty" default:"1" validate:"required,gte=1"`
 }
+
+func (d *DeterministicSamplerConfig) GetSamplingFields() []string {
+	return nil
+}
+
+type MockSamplerConfig struct {
+	SampleRate int `yaml:"SampleRate,omitempty" default:"1" validate:"required,gte=1"`
+	FieldList  []string
+}
+
+func (d *MockSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*DynamicSamplerConfig)(nil)
 
 type DynamicSamplerConfig struct {
 	SampleRate     int64    `json:"samplerate" yaml:"SampleRate,omitempty" validate:"required,gte=1"`
@@ -158,6 +177,12 @@ type DynamicSamplerConfig struct {
 	MaxKeys        int      `json:"maxkeys" yaml:"MaxKeys,omitempty"`
 	UseTraceLength bool     `json:"usetracelength" yaml:"UseTraceLength,omitempty"`
 }
+
+func (d *DynamicSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*EMADynamicSamplerConfig)(nil)
 
 type EMADynamicSamplerConfig struct {
 	GoalSampleRate      int      `json:"goalsamplerate" yaml:"GoalSampleRate,omitempty" validate:"gte=1"`
@@ -170,6 +195,12 @@ type EMADynamicSamplerConfig struct {
 	MaxKeys             int      `json:"maxkeys" yaml:"MaxKeys,omitempty"`
 	UseTraceLength      bool     `json:"usetracelength" yaml:"UseTraceLength,omitempty"`
 }
+
+func (d *EMADynamicSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*EMAThroughputSamplerConfig)(nil)
 
 type EMAThroughputSamplerConfig struct {
 	GoalThroughputPerSec int      `json:"goalthroughputpersec" yaml:"GoalThroughputPerSec,omitempty"`
@@ -185,6 +216,12 @@ type EMAThroughputSamplerConfig struct {
 	UseTraceLength       bool     `json:"usetracelength" yaml:"UseTraceLength,omitempty"`
 }
 
+func (d *EMAThroughputSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*WindowedThroughputSamplerConfig)(nil)
+
 type WindowedThroughputSamplerConfig struct {
 	UpdateFrequency      Duration `json:"updatefrequency" yaml:"UpdateFrequency,omitempty"`
 	LookbackFrequency    Duration `json:"lookbackfrequency" yaml:"LookbackFrequency,omitempty"`
@@ -195,6 +232,12 @@ type WindowedThroughputSamplerConfig struct {
 	UseTraceLength       bool     `json:"usetracelength" yaml:"UseTraceLength,omitempty"`
 }
 
+func (d *WindowedThroughputSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*TotalThroughputSamplerConfig)(nil)
+
 type TotalThroughputSamplerConfig struct {
 	GoalThroughputPerSec int      `json:"goalthroughputpersec" yaml:"GoalThroughputPerSec,omitempty" validate:"gte=1"`
 	UseClusterSize       bool     `json:"useclustersize" yaml:"UseClusterSize,omitempty"`
@@ -204,11 +247,43 @@ type TotalThroughputSamplerConfig struct {
 	UseTraceLength       bool     `json:"usetracelength" yaml:"UseTraceLength,omitempty"`
 }
 
+func (d *TotalThroughputSamplerConfig) GetSamplingFields() []string {
+	return d.FieldList
+}
+
+var _ GetSamplingFielder = (*RulesBasedSamplerConfig)(nil)
+
 type RulesBasedSamplerConfig struct {
 	// Rules has deliberately different names for json and yaml for conversion from old to new format
 	Rules             []*RulesBasedSamplerRule `json:"rule" yaml:"Rules,omitempty"`
 	CheckNestedFields bool                     `json:"checknestedfields" yaml:"CheckNestedFields,omitempty"`
 }
+
+func (r *RulesBasedSamplerConfig) GetSamplingFields() []string {
+	fields := make(generics.Set[string], 0)
+
+	for _, rule := range r.Rules {
+		if rule == nil {
+			continue
+		}
+
+		for _, condition := range rule.Conditions {
+			fields.Add(condition.Fields...)
+
+			if condition.Field != "" {
+				fields.Add(condition.Field)
+			}
+		}
+
+		if rule.Sampler != nil {
+			fields.Add(rule.Sampler.GetSamplingFields()...)
+		}
+	}
+
+	return fields.Members()
+}
+
+var _ GetSamplingFielder = (*RulesBasedDownstreamSampler)(nil)
 
 type RulesBasedDownstreamSampler struct {
 	DynamicSampler            *DynamicSamplerConfig            `json:"dynamicsampler" yaml:"DynamicSampler,omitempty"`
@@ -217,6 +292,36 @@ type RulesBasedDownstreamSampler struct {
 	WindowedThroughputSampler *WindowedThroughputSamplerConfig `json:"windowedthroughputsampler" yaml:"WindowedThroughputSampler,omitempty"`
 	TotalThroughputSampler    *TotalThroughputSamplerConfig    `json:"totalthroughputsampler" yaml:"TotalThroughputSampler,omitempty"`
 	DeterministicSampler      *DeterministicSamplerConfig      `json:"deterministicsampler" yaml:"DeterministicSampler,omitempty"`
+}
+
+func (r *RulesBasedDownstreamSampler) GetSamplingFields() []string {
+	fields := make(generics.Set[string], 0)
+
+	if r.DeterministicSampler != nil {
+		fields.Add(r.DeterministicSampler.GetSamplingFields()...)
+	}
+
+	if r.DynamicSampler != nil {
+		fields.Add(r.DynamicSampler.GetSamplingFields()...)
+	}
+
+	if r.EMADynamicSampler != nil {
+		fields.Add(r.EMADynamicSampler.GetSamplingFields()...)
+	}
+
+	if r.EMAThroughputSampler != nil {
+		fields.Add(r.EMAThroughputSampler.GetSamplingFields()...)
+	}
+
+	if r.WindowedThroughputSampler != nil {
+		fields.Add(r.WindowedThroughputSampler.GetSamplingFields()...)
+	}
+
+	if r.TotalThroughputSampler != nil {
+		fields.Add(r.TotalThroughputSampler.GetSamplingFields()...)
+	}
+
+	return fields.Members()
 }
 
 type RulesBasedSamplerRule struct {

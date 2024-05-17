@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,28 +10,35 @@ import (
 	"syscall"
 	"time"
 
-	_ "go.uber.org/automaxprocs"
-	"golang.org/x/exp/slices"
-
 	"github.com/facebookgo/inject"
 	"github.com/facebookgo/startstop"
 	libhoney "github.com/honeycombio/libhoney-go"
-	"github.com/honeycombio/libhoney-go/transmission"
+	"github.com/jonboulle/clockwork"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
+	_ "go.uber.org/automaxprocs"
+	"golang.org/x/exp/slices"
 
+	"github.com/honeycombio/libhoney-go/transmission"
 	"github.com/honeycombio/refinery/app"
+	"github.com/honeycombio/refinery/centralstore"
 	"github.com/honeycombio/refinery/collect"
+	"github.com/honeycombio/refinery/collect/cache"
+	"github.com/honeycombio/refinery/collect/stressRelief"
 	"github.com/honeycombio/refinery/config"
-	"github.com/honeycombio/refinery/internal/peer"
+	"github.com/honeycombio/refinery/internal/gossip"
+	"github.com/honeycombio/refinery/internal/health"
+	"github.com/honeycombio/refinery/internal/otelutil"
 	"github.com/honeycombio/refinery/logger"
 	"github.com/honeycombio/refinery/metrics"
+	"github.com/honeycombio/refinery/redis"
 	"github.com/honeycombio/refinery/sample"
 	"github.com/honeycombio/refinery/service/debug"
-	"github.com/honeycombio/refinery/sharder"
 	"github.com/honeycombio/refinery/transmit"
 )
 
-// set by travis.
+// set by CI.
 var BuildID string
 var version string
 
@@ -83,7 +89,7 @@ func main() {
 		Version: version,
 	}
 
-	c, err := config.NewConfig(opts, func(err error) {
+	cfg, err := config.NewConfig(opts, func(err error) {
 		if a.Logger != nil {
 			a.Logger.Error().WithField("error", err).Logf("error loading config")
 		}
@@ -96,35 +102,26 @@ func main() {
 		fmt.Println("Config and Rules validated successfully.")
 		os.Exit(0)
 	}
-	c.RegisterReloadCallback(func() {
+	cfg.RegisterReloadCallback(func() {
 		if a.Logger != nil {
 			a.Logger.Info().Logf("configuration change was detected and the configuration was reloaded")
 		}
 	})
 
 	// get desired implementation for each dependency to inject
-	lgr := logger.GetLoggerImplementation(c)
-	collector := collect.GetCollectorImplementation(c)
-	metricsSingleton := metrics.GetMetricsImplementation(c)
-	shrdr := sharder.GetSharderImplementation(c)
+	lgr := logger.GetLoggerImplementation(cfg)
+	centralcollector := &collect.CentralCollector{}
+	metricsSingleton := metrics.GetMetricsImplementation(cfg)
 	samplerFactory := &sample.SamplerFactory{}
 
 	// set log level
-	logLevel := c.GetLoggerLevel().String()
+	logLevel := cfg.GetLoggerLevel().String()
 	if err := lgr.SetLevel(logLevel); err != nil {
 		fmt.Printf("unable to set logging level: %v\n", err)
 		os.Exit(1)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), c.GetPeerTimeout())
-	defer cancel()
 	done := make(chan struct{})
-	peers, err := peer.NewPeers(ctx, c, done)
-
-	if err != nil {
-		fmt.Printf("unable to load peers: %+v\n", err)
-		os.Exit(1)
-	}
 
 	// upstreamTransport is the http transport used to send things on to Honeycomb
 	upstreamTransport := &http.Transport{
@@ -135,26 +132,16 @@ func main() {
 		TLSHandshakeTimeout: 15 * time.Second,
 	}
 
-	// peerTransport is the http transport used to send things to a local peer
-	peerTransport := &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		Dial: (&net.Dialer{
-			Timeout: 3 * time.Second,
-		}).Dial,
-		TLSHandshakeTimeout: 1200 * time.Millisecond,
-	}
-
 	genericMetricsRecorder := metrics.NewMetricsPrefixer("")
 	upstreamMetricsRecorder := metrics.NewMetricsPrefixer("libhoney_upstream")
-	peerMetricsRecorder := metrics.NewMetricsPrefixer("libhoney_peer")
 
 	userAgentAddition := "refinery/" + version
 	upstreamClient, err := libhoney.NewClient(libhoney.ClientConfig{
 		Transmission: &transmission.Honeycomb{
-			MaxBatchSize:          c.GetMaxBatchSize(),
-			BatchTimeout:          c.GetBatchTimeout(),
+			MaxBatchSize:          cfg.GetMaxBatchSize(),
+			BatchTimeout:          cfg.GetBatchTimeout(),
 			MaxConcurrentBatches:  libhoney.DefaultMaxConcurrentBatches,
-			PendingWorkCapacity:   uint(c.GetUpstreamBufferSize()),
+			PendingWorkCapacity:   uint(cfg.GetUpstreamBufferSize()),
 			UserAgentAddition:     userAgentAddition,
 			Transport:             upstreamTransport,
 			BlockOnSend:           true,
@@ -167,69 +154,92 @@ func main() {
 		os.Exit(1)
 	}
 
-	peerClient, err := libhoney.NewClient(libhoney.ClientConfig{
-		Transmission: &transmission.Honeycomb{
-			MaxBatchSize:          c.GetMaxBatchSize(),
-			BatchTimeout:          c.GetBatchTimeout(),
-			MaxConcurrentBatches:  libhoney.DefaultMaxConcurrentBatches,
-			PendingWorkCapacity:   uint(c.GetPeerBufferSize()),
-			UserAgentAddition:     userAgentAddition,
-			Transport:             peerTransport,
-			DisableCompression:    !c.GetCompressPeerCommunication(),
-			EnableMsgpackEncoding: true,
-			Metrics:               peerMetricsRecorder,
-		},
-	})
-	if err != nil {
-		fmt.Printf("unable to initialize peer libhoney client")
-		os.Exit(1)
-	}
-
-	stressRelief := &collect.StressRelief{Done: done}
+	stressRelief := &stressRelief.StressRelief{}
 	upstreamTransmission := transmit.NewDefaultTransmission(upstreamClient, upstreamMetricsRecorder, "upstream")
-	peerTransmission := transmit.NewDefaultTransmission(peerClient, peerMetricsRecorder, "peer")
 
 	// we need to include all the metrics types so we can inject them in case they're needed
 	// but we only want to instantiate the ones that are enabled with non-null values
 	var legacyMetrics metrics.Metrics = &metrics.NullMetrics{}
 	var promMetrics metrics.Metrics = &metrics.NullMetrics{}
 	var oTelMetrics metrics.Metrics = &metrics.NullMetrics{}
-	if c.GetLegacyMetricsConfig().Enabled {
+	if cfg.GetLegacyMetricsConfig().Enabled {
 		legacyMetrics = &metrics.LegacyMetrics{}
 	}
-	if c.GetPrometheusMetricsConfig().Enabled {
+	if cfg.GetPrometheusMetricsConfig().Enabled {
 		promMetrics = &metrics.PromMetrics{}
 	}
-	if c.GetOTelMetricsConfig().Enabled {
+	if cfg.GetOTelMetricsConfig().Enabled {
 		oTelMetrics = &metrics.OTelMetrics{}
 	}
+	decisionCache := &cache.CuckooSentCache{}
+
+	var basicStore centralstore.BasicStorer
+	var channels gossip.Gossiper
+	switch cfg.GetCentralStoreOptions().BasicStoreType {
+	case "redis":
+		basicStore = &centralstore.RedisBasicStore{}
+		channels = &gossip.GossipRedis{}
+	case "local":
+		basicStore = &centralstore.LocalStore{}
+		channels = &gossip.InMemoryGossip{}
+	default:
+		fmt.Printf("unknown basic store type: %s\n", cfg.GetCentralStoreOptions().BasicStoreType)
+		os.Exit(1)
+	}
+	smartStore := &centralstore.SmartWrapper{}
+
+	resourceLib := "refinery"
+	resourceVer := version
+	var tracer trace.Tracer
+	shutdown := func() {}
+	switch cfg.GetOTelTracingConfig().Type {
+	case "none":
+		tracer = trace.Tracer(noop.Tracer{})
+	case "otel":
+		// let's set up some OTel tracing
+		tracer, shutdown = otelutil.SetupTracing(cfg.GetOTelTracingConfig(), resourceLib, resourceVer)
+	default:
+		fmt.Printf("unknown tracing type: %s\n", cfg.GetOTelTracingConfig().Type)
+		os.Exit(1)
+	}
+	defer shutdown()
 
 	// we need to include all the metrics types so we can inject them in case they're needed
+	// The "recorders" are the ones that various parts of the system will use to record metrics.
+	// The "singleton" is a wrapper that contains whichever of the specific metrics implementations
+	// are enabled. It's used to provide a consistent interface to the rest of the system.
 	var g inject.Graph
 	if opts.Debug {
 		g.Logger = graphLogger{}
 	}
 	objects := []*inject.Object{
-		{Value: c},
-		{Value: peers},
+		{Value: cfg},
 		{Value: lgr},
 		{Value: upstreamTransport, Name: "upstreamTransport"},
-		{Value: peerTransport, Name: "peerTransport"},
 		{Value: upstreamTransmission, Name: "upstreamTransmission"},
-		{Value: peerTransmission, Name: "peerTransmission"},
-		{Value: shrdr},
-		{Value: collector},
+		{Value: &cache.SpanCache_basic{}},
+		{Value: centralcollector, Name: "collector"},
+		{Value: decisionCache},
 		{Value: legacyMetrics, Name: "legacyMetrics"},
 		{Value: promMetrics, Name: "promMetrics"},
 		{Value: oTelMetrics, Name: "otelMetrics"},
 		{Value: metricsSingleton, Name: "metrics"},
 		{Value: genericMetricsRecorder, Name: "genericMetrics"},
 		{Value: upstreamMetricsRecorder, Name: "upstreamMetrics"},
-		{Value: peerMetricsRecorder, Name: "peerMetrics"},
 		{Value: version, Name: "version"},
 		{Value: samplerFactory},
+		{Value: channels, Name: "gossip"},
 		{Value: stressRelief, Name: "stressRelief"},
+		{Value: tracer, Name: "tracer"},
+		{Value: clockwork.NewRealClock()},
+		{Value: basicStore},
+		{Value: smartStore},
+		{Value: &health.Health{}},
 		{Value: &a},
+	}
+
+	if cfg.GetCentralStoreOptions().BasicStoreType == "redis" {
+		objects = append(objects, &inject.Object{Value: &redis.DefaultClient{}, Name: "redis"})
 	}
 	err = g.Provide(objects...)
 	if err != nil {
@@ -238,7 +248,7 @@ func main() {
 	}
 
 	if opts.Debug {
-		err = g.Provide(&inject.Object{Value: &debug.DebugService{Config: c}})
+		err = g.Provide(&inject.Object{Value: &debug.DebugService{Config: cfg}})
 		if err != nil {
 			fmt.Printf("failed to provide injection graph. error: %+v\n", err)
 			os.Exit(1)
@@ -278,11 +288,9 @@ func main() {
 	}
 	for name, typ := range libhoneyMetricsName {
 		upstreamMetricsRecorder.Register(name, typ)
-		peerMetricsRecorder.Register(name, typ)
 	}
 
-	metricsSingleton.Store("UPSTREAM_BUFFER_SIZE", float64(c.GetUpstreamBufferSize()))
-	metricsSingleton.Store("PEER_BUFFER_SIZE", float64(c.GetPeerBufferSize()))
+	metricsSingleton.Store("UPSTREAM_BUFFER_SIZE", float64(cfg.GetUpstreamBufferSize()))
 
 	// set up signal channel to exit
 	sigsToExit := make(chan os.Signal, 1)

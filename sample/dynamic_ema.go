@@ -9,7 +9,6 @@ import (
 	"github.com/honeycombio/refinery/config"
 	"github.com/honeycombio/refinery/logger"
 	"github.com/honeycombio/refinery/metrics"
-	"github.com/honeycombio/refinery/types"
 )
 
 type EMADynamicSampler struct {
@@ -27,7 +26,8 @@ type EMADynamicSampler struct {
 	prefix              string
 	lastMetrics         map[string]int64
 
-	key *traceKey
+	key       *traceKey
+	keyFields []string
 
 	dynsampler dynsampler.Sampler
 }
@@ -47,6 +47,8 @@ func (d *EMADynamicSampler) Start() error {
 		d.maxKeys = 500
 	}
 	d.prefix = "emadynamic_"
+
+	d.keyFields = d.Config.GetSamplingFields()
 
 	// spin up the actual dynamic sampler
 	d.dynsampler = &dynsampler.EMASampleRate{
@@ -71,7 +73,7 @@ func (d *EMADynamicSampler) Start() error {
 	return nil
 }
 
-func (d *EMADynamicSampler) GetSampleRate(trace *types.Trace) (rate uint, keep bool, reason string, key string) {
+func (d *EMADynamicSampler) GetSampleRate(trace FieldsExtractor) (rate uint, keep bool, reason string, key string) {
 	key = d.key.build(trace)
 	count := int(trace.DescendantCount())
 	rate = uint(d.dynsampler.GetSampleRateMulti(key, count))
@@ -83,7 +85,7 @@ func (d *EMADynamicSampler) GetSampleRate(trace *types.Trace) (rate uint, keep b
 		"sample_key":  key,
 		"sample_rate": rate,
 		"sample_keep": shouldKeep,
-		"trace_id":    trace.TraceID,
+		"trace_id":    trace.ID(),
 		"span_count":  count,
 	}).Logf("got sample rate and decision")
 	if shouldKeep {
@@ -102,4 +104,8 @@ func (d *EMADynamicSampler) GetSampleRate(trace *types.Trace) (rate uint, keep b
 		}
 	}
 	return rate, shouldKeep, "emadynamic", key
+}
+
+func (d *EMADynamicSampler) GetKeyFields() []string {
+	return d.keyFields
 }

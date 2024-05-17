@@ -99,19 +99,22 @@ Conditions:
 
 ## Using a Prefix to Identify a Field in a Related Span
 
-Fields can contain a span selection prefix. Today, the only prefix supported is `root`.
-This prefix causes the root span to be searched for the specified field, rather than the span being evaluated.
+Field names can contain a span selection prefix. Today, the only prefix
+supported is `root`. This prefix causes the root span to be searched for the
+specified field, rather than the span being evaluated.
 
 ```yaml
 Rules:
-    - Name: limit by root span context
+    - Name: only consider errors originating from the login service
       Conditions:
-        Field: "root.http.status"
-        Operator: =
-        Value: "500"
-        Datatype: string
+        - Field: root.service.name
+          Operator: =
+          Value: login
+        - Field: http.status
+          Operator: =
+          Value: 500
+          Datatype: int
 ```
-
 
 ## `Operator`
 
@@ -200,6 +203,15 @@ Both the `Value` and the `Datatype` parameters are ignored.
 For most cases, use `not-exists` in a rule with a scope of "span".
 WARNING: Rules can have `Scope: trace` or `Scope: span`; `not-exists` used with `Scope: trace` will be true if **any** single span in the entire trace matches the negative condition.
 This is almost never desired behavior.
+
+### has-root-span
+
+Tests if the trace as a whole has a root span.
+
+The `Value` parameter can either be `true` or `false`.
+
+NOTE: `has-root-span` does not check if a given span **is** a root span,
+it checks if the containing trace **has** a root span.
 
 ### `matches`
 

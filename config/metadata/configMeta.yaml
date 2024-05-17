@@ -251,7 +251,7 @@ groups:
         description: >
           If `true`, then Refinery will add the following tag to all
           traces:
-          - `meta.refinery.local_hostname`: the hostname of the Refinery node
+          - `meta.refinery.host.name`: the hostname of the Refinery node
 
   - name: Traces
     title: "Traces"
@@ -299,6 +299,11 @@ groups:
           that decision for a period of time. When additional spans (including
           the root span) arrive, they will be kept or dropped based on the
           original decision.
+
+          When running Refinery with Redis as the central store, this timer is
+          also used to determine how long to keep trace decisions in Redis.
+          Refinery will keep trace decisions in Redis for 10 times the value of
+          this timer or 15 minutes, whichever is greater.
 
           If particularly long-lived traces are present in your data, then you
           should increase this timer. Note that this increase will also
@@ -472,7 +477,7 @@ groups:
         summary: is the API key used to send Refinery's logs to Honeycomb.
         description: >
           It is recommended that you create a separate team and key for
-          Refinery logs.
+          Refinery telemetry.
 
       - name: Dataset
         v1group: HoneycombLogger
@@ -628,7 +633,7 @@ groups:
         summary: is the API key used by Refinery to send its metrics to Honeycomb.
         description: >
           It is recommended that you create a separate team and key for
-          Refinery metrics.
+          Refinery telemetry.
 
       - name: Dataset
         v1group: HoneycombMetrics
@@ -699,7 +704,7 @@ groups:
         summary: is the API key used to send Honeycomb metrics via OpenTelemetry.
         description: >
           It is recommended that you create a separate team and key for
-          Refinery metrics.
+          Refinery telemetry.
 
           If this is blank, then Refinery will not set the Honeycomb-specific
           headers for OpenTelemetry, and your `APIHost` must be set to a
@@ -713,7 +718,7 @@ groups:
         validations:
           - type: notempty
         firstversion: v2.0
-        summary: is the Honeycomb dataset that Refinery sends its OpenTelemetry metrics.
+        summary: is the Honeycomb dataset to which Refinery sends its OpenTelemetry metrics.
         description: >
           Only used if `APIKey` is specified.
 
@@ -739,6 +744,90 @@ groups:
           `gzip` is the default and recommended value. In rare circumstances,
           compression costs may outweigh the benefits, in which case `none`
           may be used.
+
+  - name: OTelTracing
+    title: "OpenTelemetry Tracing"
+    description: contains configuration for Refinery's own tracing. This is
+      generally not expected to be used by end users, but is useful for
+      debugging Refinery itself. In rare cases, it may be useful for debugging
+      user configurations; please consult with Honeycomb support before using
+      this feature.
+    fields:
+      - name: Type
+        type: string
+        valuetype: choice
+        choices: ["otel", "none"]
+        default: "none"
+        reload: false
+        validations:
+          - type: choice
+        summary: is the type of tracing to use for Refinery's own traces.
+        description: >
+          The setting specifies how (and if) Refinery sends traces.
+
+          `none` means that traces are discarded.
+
+          `otel` means that OpenTelemetry traces will be generated according
+          to the settings in this section.
+
+      - name: APIHost
+        type: url
+        valuetype: nondefault
+        default: "https://api.honeycomb.io"
+        reload: false
+        firstversion: v2.6
+        summary: is the URL of the OpenTelemetry API to which traces will be sent.
+        description: >
+          Refinery's internal traces will be sent to the `/v1/traces`
+          endpoint on this host.
+
+      - name: APIKey
+        type: string
+        pattern: apikey
+        valuetype: nondefault
+        default: ""
+        example: "SetThisToAHoneycombKey"
+        reload: false
+        firstversion: v2.6
+        envvar: REFINERY_HONEYCOMB_TRACES_API_KEY, REFINERY_HONEYCOMB_API_KEY
+        commandline: otel-traces-api-key
+        validations:
+          - type: format
+            arg: apikey
+        summary: is the API key used to send Refinery's traces to Honeycomb.
+        description: >
+          It is recommended that you create a separate team and key for
+          Refinery telemetry.
+
+          If this is blank, then Refinery will not set the Honeycomb-specific
+          headers for OpenTelemetry, and your `APIHost` must be set to a
+          valid OpenTelemetry endpoint.
+
+      - name: Dataset
+        type: string
+        valuetype: nondefault
+        default: "Refinery Traces"
+        reload: false
+        validations:
+          - type: notempty
+        firstversion: v2.0
+        summary: is the Honeycomb dataset to which Refinery sends its OpenTelemetry metrics.
+        description: >
+          Only used if `APIKey` is specified.
+
+      - name: SampleRate
+        type: int
+        valuetype: nondefault
+        default: 100
+        validations:
+          - type: minimum
+            arg: 1
+        reload: true
+        summary: is the rate at which Refinery samples its own traces.
+        description: >
+          This is the Honeycomb sample rate used to sample traces sent by Refinery. Since each
+          incoming span generates multiple outgoing spans, a sample rate of at least 100 is
+          strongly advised.
 
   - name: PeerManagement
     title: "Peer Management"
@@ -959,6 +1048,63 @@ groups:
         description: >
           It is rarely necessary to adjust this value.
 
+      - name: MaxIdle
+        firstversion: v2.6
+        type: int
+        valuetype: nondefault
+        default: 20
+        reload: false
+        validations:
+          - type: minimum
+            arg: 0
+        summary: is the maximum number of idle connections in the Redis connection pool.
+        description: >
+          This setting is used to control the number of idle connections to
+          Redis. It is rarely necessary to adjust this value.
+
+      - name: MaxActive
+        firstversion: v2.6
+        type: int
+        valuetype: nondefault
+        default: 20
+        validations:
+          - type: minimum
+            arg: 10
+        reload: false
+        summary: is the maximum number of active connections in the Redis connection pool.
+        description: >
+          This setting is used to control the maximum number of active
+          connections to Redis in the Redis connection pool. It may be useful to
+          increase this value in high-throughput environments.
+
+      - name: Parallelism
+        firstversion: v3.0
+        type: int
+        valuetype: nondefault
+        default: 10
+        reload: true
+        validations:
+          - type: minimum
+            arg: 3
+        summary: is the number of parallel Redis connections to use when communicating with Redis for trace decisions.
+        description: >
+          This setting is used to control the number of parallel Redis
+          connections use when communicating trace information to Redis. It may
+          be useful to increase this value in high-throughput environments.
+
+      - name: MetricsCycleRate
+        firstversion: v3.0
+        type: duration
+        valuetype: nondefault
+        default: 1m
+        reload: true
+        summary: is the interval between retrieving metrics from Redis server.
+        description: >
+          This setting is used to control the interval between retrieving
+          metrics from Redis server. It may be useful to increase this value in
+          high-throughput environments. By setting this value to 0, the metrics
+          retrieval will be disabled.
+
       - name: Strategy
         v1group: PeerManagement
         v1name: Strategy
@@ -1018,6 +1164,7 @@ groups:
         valuetype: nondefault
         reload: false
         firstversion: v2.2
+        lastversion: v2.5
         summary: is the maximum number of in-flight spans redirected from other peers stored in the peer span queue.
         description: >
           The peer span queue serves as a buffer for spans redirected from other peers before they are processed.
@@ -1094,6 +1241,93 @@ groups:
           and `Gi`) are supported. Fractional values with a suffix are
           supported. See `MaxMemoryPercentage` for more details. If set,
           `Collections.AvailableMemory` must not be defined.
+
+      - name: DeciderCycleDuration
+        type: duration
+        valuetype: nondefault
+        default: 100ms
+        reload: false
+        summary: is the cycle time used for processing batches of traces.
+        description: >
+          This setting controls the duration that Refinery uses for processing
+          trace batches. It is rarely necessary to adjust this value.
+
+      - name: DeciderBatchSize
+        type: int
+        valuetype: nondefault
+        default: 1000
+        reload: true
+        summary: is the maximum number of traces retrieved by the decision processor in a single request.
+        description: >
+          This setting controls the number of traces that are requested from the
+          central store when Refinery is making trace decisions. Refinery's
+          trace throughput is limited by
+          `DeciderBatchSize*DeciderCycleDuration`, which is the maximum number
+          of trace decisions Refinery can make in one second. It is rarely
+          necessary to adjust this value.
+
+      - name: SenderCycleDuration
+        type: duration
+        valuetype: nondefault
+        default: 100ms
+        reload: false
+        summary: is the duration to pause between sending trace batches.
+        description: >
+          This setting controls the duration that Refinery waits between
+          sending trace batches. It is rarely necessary to adjust this value.
+
+      - name: SenderBatchSize
+        type: int
+        valuetype: nondefault
+        default: 1000
+        reload: false
+        summary: is the number of traces evaluated for sending in a single request.
+        description: >
+          This setting controls the number of trace IDs processed when refinery
+          is considering which spans to send or drop. Refinery's trace
+          throughput is limited by
+          `SenderBatchSize*SenderCycleDuration`, which is the
+          maximum number of traces that can be processed in one second. It is
+          rarely necessary to adjust this value.
+
+      - name: TraceFetcherConcurrency
+        type: int
+        valuetype: nondefault
+        default: 10
+        reload: true
+        summary: is the maximum concurrency to use when fetching traces from the central store.
+        description: >
+          This setting controls the number of concurrent trace fetchers that
+          Refinery will use when fetching traces from the central store to make
+          trace decisions. It is rarely necessary to adjust this value.
+
+      - name: ShutdownDelay
+        type: duration
+        valuetype: nondefault
+        default: 30s
+        reload: true
+        summary: controls the maximum time Refinery can use while draining traces at shutdown.
+        description: >
+          This setting controls the duration that Refinery expects to have to
+          drain in-process traces before shutting down an instance. When asked
+          to shut down gracefully, Refinery stops accepting new spans
+          immediately and uses half of this duration to allow traces to drain
+          naturally. After that time, it actively drains the remaining traces by
+          sending them to Redis. This value should be set to a bit less than the
+          normal timeout period for shutting down without forcibly terminating
+          the process.
+
+      - name: MemoryCycleDuration
+        type: duration
+        valuetype: nonzero
+        default: 10s
+        reload: false
+        summary: is the cycle time between memory checks.
+        description: >
+          This setting controls the amount of time that Refinery waits between
+          checking its memory usage. This is somewhat expensive, so it's best
+          not to do it too often, but in situations where bursts of traffic can
+          cause memory pressure, it can be useful to check more frequently.
 
   - name: BufferSizes
     title: "Buffer Sizes"
@@ -1249,6 +1483,19 @@ groups:
           The first field in the list that is present in an event will be used
           as the parent ID. A trace without a `parent_id` is assumed to be a
           root span.
+
+      - name: SpanNames
+        type: stringarray
+        valuetype: stringarray
+        example: "trace.span_id,spanId"
+        reload: true
+        validations:
+          - type: elementType
+            arg: string
+        summary: is the list of field names to use for the span ID.
+        description: >
+          The first field in the list that is present in an event will be used
+          as the span ID.
 
   - name: GRPCServerParameters
     title: "gRPC Server Parameters"
@@ -1600,3 +1847,142 @@ groups:
           If this duration is `0`, then Refinery will not start in stressed
           mode, which will provide faster startup at the possible cost of
           startup instability.
+
+  - name: CentralStore
+    title: "Central Data Store"
+    description: >
+      controls the Central Data Store, which provides the storage system that
+      Refinery uses to record and share trace data while traces are in flight.
+
+    fields:
+      - name: Type
+        firstVersion: v2.6
+        type: string
+        valuetype: choice
+        choices: ["local", "redis"]
+        default: "local"
+        reload: false
+        summary: is the type of central store to use.
+        description: >
+          "local" means that refinery stores all trace data locally and
+          is generally only used in a configuration with a single Refinery node.
+
+          "redis" means that a Redis instance is used as the central store
+          for a cluster of Refineries; the Central Store is the mechanism
+          through which the refineries share trace data.
+
+      - name: SpanChannelSize
+        firstVersion: v2.6
+        type: int
+        valuetype: nondefault
+        default: 100
+        reload: true
+        summary: is the size of the channel used to buffer spans to send to the central store.
+        description: >
+          The size of this buffer is measured in spans. If the buffer fills up,
+          performance will degrade because Refinery will block while waiting for
+          space to become available. If this happens and increasing this size
+          only delays the problem, then you should consider whether the I/O
+          bandwidth to the central store is sufficient.
+
+      - name: WriteSpanBatchSize
+        firstVersion: v3.0
+        type: int
+        valuetype: nondefault
+        default: 20
+        reload: true
+        summary: is the maximum number of spans to be included for writing to basic store in a single request.
+        description: >
+          This setting controls the number of spans sent to the basic store at
+          the same time when Refinery is processing incoming spans.
+
+      - name: StateBatchSize
+        firstVersion: v3.0
+        type: int
+        valuetype: nondefault
+        default: 400
+        reload: true
+        summary: is the maximum number of traces to be included for updating state of the central store in a single request.
+        description: >
+          This setting controls the number of traces sent to the central store at
+          the same time when Refinery is updating the state of the central store.
+
+      - name: StateTicker
+        firstVersion: v2.6
+        type: duration
+        valuetype: nondefault
+        default: 1s
+        reload: true
+        summary: is the duration of the ticker that periodically updates the state of the central store.
+        description: >
+          This ticker is used to periodically update the state of the spans in
+          the central store. Making it shorter will decrease latency in the
+          central store at the expense of increased CPU usage.
+
+      - name: SendDelay
+        firstVersion: v2.6
+        type: duration
+        valuetype: nondefault
+        default: 2s
+        reload: true
+        summary: is the duration of the delay before sending spans to the central store.
+        description: >
+          This delay is used to provide time to allow asynchronous spans to
+          arrive after the root span arrives, and before making a trace
+          decision. In a heavily async environment, you may want to increase
+          this value at the cost of greater latency and increased memory
+          consumption in the central store.
+
+      - name: TraceTimeout
+        firstVersion: v2.6
+        type: duration
+        valuetype: nondefault
+        default: 1m
+        validations:
+          - type: minimum
+            arg: 1s
+        reload: true
+        summary: is the maximum duration after which a trace is considered to have timed out.
+        description: >
+          This value determines how long after receiving the first span that
+          Refinery will wait for a root span to arrive. If a root span does not
+          arrive within this time, then the trace decision will be made with
+          whatever information is available.
+
+          Increasing this value can improve the accuracy of trace decisions at
+          the cost of increased memory consumption in the central store.
+
+      - name: DecisionTimeout
+        firstVersion: v2.6
+        type: duration
+        valuetype: nondefault
+        default: 3s
+        reload: false
+        summary: is the time the central store will wait to receive a trace decision from Refinery
+        description: >
+          This value controls how long the central store will wait for a trace
+          decision from Refinery after assigning it; the only reason this should
+          happen is if a Refinery crashes or is forcibly shut down. TODO: not
+          sure we need to expose this.
+
+      - name: ReaperRunInterval
+        firstVersion: v2.6
+        type: duration
+        valuetype: nondefault
+        default: 10s
+        reload: false
+        summary: is the interval at which the reaper runs to clean up expired traces.
+        description: >
+          This value determines how often the reaper runs to clean up expired traces
+          in the central store. TODO: don't expose this?
+
+      - name: ReaperBatchSize
+        firstVersion: v3.0
+        type: int
+        valuetype: nondefault
+        default: 500
+        reload: false
+        summary: is the maximum number of traces to be included for deleting expired traces in a single request.
+        description: >
+          This value determines how many traces the reaper will delete in a single
+          request.

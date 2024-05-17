@@ -25,11 +25,11 @@ type Config interface {
 
 	// GetListenAddr returns the address and port on which to listen for
 	// incoming events
-	GetListenAddr() (string, error)
+	GetListenAddr() string
 
 	// GetPeerListenAddr returns the address and port on which to listen for
 	// peer traffic
-	GetPeerListenAddr() (string, error)
+	GetPeerListenAddr() string
 
 	// GetHTTPIdleTimeout returns the idle timeout for refinery's HTTP server
 	GetHTTPIdleTimeout() time.Duration
@@ -43,7 +43,7 @@ type Config interface {
 
 	// GetGRPCListenAddr returns the address and port on which to listen for
 	// incoming events over gRPC
-	GetGRPCListenAddr() (string, error)
+	GetGRPCListenAddr() string
 
 	// Returns the entire GRPC config block
 	GetGRPCConfig() GRPCServerParameters
@@ -52,25 +52,25 @@ type Config interface {
 	IsAPIKeyValid(key string) bool
 
 	// GetPeers returns a list of other servers participating in this proxy cluster
-	GetPeers() ([]string, error)
+	GetPeers() []string
 
-	GetPeerManagementType() (string, error)
+	GetPeerManagementType() string
 
 	// GetRedisHost returns the address of a Redis instance to use for peer
 	// management.
-	GetRedisHost() (string, error)
+	GetRedisHost() string
 
 	// GetRedisUsername returns the username of a Redis instance to use for peer
 	// management.
-	GetRedisUsername() (string, error)
+	GetRedisUsername() string
 
 	// GetRedisPassword returns the password of a Redis instance to use for peer
 	// management.
-	GetRedisPassword() (string, error)
+	GetRedisPassword() string
 
 	// GetRedisAuthCode returns the AUTH string to use for connecting to a Redis
 	// instance to use for peer management
-	GetRedisAuthCode() (string, error)
+	GetRedisAuthCode() string
 
 	// GetRedisPrefix returns the prefix string used in the keys for peer
 	// management.
@@ -81,18 +81,26 @@ type Config interface {
 
 	// GetUseTLS returns true when TLS must be enabled to dial the Redis instance to
 	// use for peer management.
-	GetUseTLS() (bool, error)
+	GetUseTLS() bool
 
 	// UseTLSInsecure returns true when certificate checks are disabled
-	GetUseTLSInsecure() (bool, error)
+	GetUseTLSInsecure() bool
+
+	GetRedisMaxIdle() int
+
+	GetRedisMaxActive() int
+
+	GetParallelism() int
+
+	GetRedisMetricsCycleRate() time.Duration
 
 	// GetHoneycombAPI returns the base URL (protocol, hostname, and port) of
 	// the upstream Honeycomb API server
-	GetHoneycombAPI() (string, error)
+	GetHoneycombAPI() string
 
 	// GetSendDelay returns the number of seconds to pause after a trace is
 	// complete before sending it, to allow stragglers to arrive
-	GetSendDelay() (time.Duration, error)
+	GetSendDelay() time.Duration
 
 	// GetBatchTimeout returns how often to send off batches in seconds
 	GetBatchTimeout() time.Duration
@@ -100,33 +108,33 @@ type Config interface {
 	// GetTraceTimeout is how long to wait before sending a trace even if it's
 	// not complete. This should be longer than the longest expected trace
 	// duration.
-	GetTraceTimeout() (time.Duration, error)
+	GetTraceTimeout() time.Duration
 
 	// GetMaxBatchSize is the number of events to be included in the batch for sending
 	GetMaxBatchSize() uint
 
 	// GetLoggerType returns the type of the logger to use. Valid types are in
 	// the logger package
-	GetLoggerType() (string, error)
+	GetLoggerType() string
 
 	// GetLoggerLevel returns the level of the logger to use.
 	GetLoggerLevel() Level
 
 	// GetHoneycombLoggerConfig returns the config specific to the HoneycombLogger
-	GetHoneycombLoggerConfig() (HoneycombLoggerConfig, error)
+	GetHoneycombLoggerConfig() HoneycombLoggerConfig
 
 	// GetStdoutLoggerConfig returns the config specific to the StdoutLogger
-	GetStdoutLoggerConfig() (StdoutLoggerConfig, error)
+	GetStdoutLoggerConfig() StdoutLoggerConfig
 
 	// GetCollectionConfig returns the config specific to the InMemCollector
-	GetCollectionConfig() (CollectionConfig, error)
+	GetCollectionConfig() CollectionConfig
 
 	// GetSamplerConfigForDestName returns the sampler type and name to use for
 	// the given destination (environment, or dataset in classic)
 	GetSamplerConfigForDestName(string) (interface{}, string, error)
 
 	// GetAllSamplerRules returns all rules in a single map, including the default rules
-	GetAllSamplerRules() (*V2SamplerConfig, error)
+	GetAllSamplerRules() *V2SamplerConfig
 
 	// GetLegacyMetricsConfig returns the config specific to LegacyMetrics
 	GetLegacyMetricsConfig() LegacyMetricsConfig
@@ -137,6 +145,9 @@ type Config interface {
 	// GetOTelMetricsConfig returns the config specific to OTelMetrics
 	GetOTelMetricsConfig() OTelMetricsConfig
 
+	// GetOTelTracingConfig returns the config specific to OTelTracing
+	GetOTelTracingConfig() OTelTracingConfig
+
 	// GetUpstreamBufferSize returns the size of the libhoney buffer to use for the upstream
 	// libhoney client
 	GetUpstreamBufferSize() int
@@ -144,18 +155,18 @@ type Config interface {
 	// libhoney client
 	GetPeerBufferSize() int
 
-	GetIdentifierInterfaceName() (string, error)
+	GetIdentifierInterfaceName() string
 
-	GetUseIPV6Identifier() (bool, error)
+	GetUseIPV6Identifier() bool
 
-	GetRedisIdentifier() (string, error)
+	GetRedisIdentifier() string
 
 	// GetSendTickerValue returns the duration to use to check for traces to send
 	GetSendTickerValue() time.Duration
 
 	// GetDebugServiceAddr sets the IP and port the debug service will run on (you must provide the
 	// command line flag -d to start the debug service)
-	GetDebugServiceAddr() (string, error)
+	GetDebugServiceAddr() string
 
 	GetIsDryRun() bool
 
@@ -189,6 +200,8 @@ type Config interface {
 	GetTraceIdFieldNames() []string
 
 	GetParentIdFieldNames() []string
+
+	GetCentralStoreOptions() SmartWrapperOptions
 }
 
 type ConfigMetadata struct {
@@ -196,4 +209,44 @@ type ConfigMetadata struct {
 	ID       string `json:"id"`
 	Hash     string `json:"hash"`
 	LoadedAt string `json:"loaded_at"`
+}
+
+type RedisConfig interface {
+	// GetRedisHost returns the address of a Redis instance to use for peer
+	// management.
+	GetRedisHost() string
+
+	// GetRedisUsername returns the username of a Redis instance to use for peer
+	// management.
+	GetRedisUsername() string
+
+	// GetRedisPassword returns the password of a Redis instance to use for peer
+	// management.
+	GetRedisPassword() string
+
+	// GetRedisAuthCode returns the AUTH string to use for connecting to a Redis
+	// instance to use for peer management
+	GetRedisAuthCode() string
+
+	// GetRedisPrefix returns the prefix string used in the keys for peer
+	// management.
+	GetRedisPrefix() string
+
+	// GetRedisDatabase returns the ID of the Redis database to use for peer management.
+	GetRedisDatabase() int
+
+	// GetUseTLS returns true when TLS must be enabled to dial the Redis instance to
+	// use for peer management.
+	GetUseTLS() bool
+
+	// UseTLSInsecure returns true when certificate checks are disabled
+	GetUseTLSInsecure() bool
+
+	GetRedisMaxIdle() int
+
+	GetRedisMaxActive() int
+
+	GetPeerTimeout() time.Duration
+
+	GetParallelism() int
 }

@@ -1,20 +1,28 @@
 package sample
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/honeycombio/refinery/config"
-	"github.com/honeycombio/refinery/internal/peer"
 	"github.com/honeycombio/refinery/logger"
 	"github.com/honeycombio/refinery/metrics"
 	"github.com/honeycombio/refinery/types"
 )
 
+// FieldsExtractor is an interface for types that can return a key field
+// that's used to determine the sample rate for a trace
+type FieldsExtractor interface {
+	AllFields() []types.Fielder
+	RootFields() types.Fielder
+	ID() string
+	DescendantCount() uint32
+}
+
 type Sampler interface {
-	GetSampleRate(trace *types.Trace) (rate uint, keep bool, reason string, key string)
+	GetSampleRate(trace FieldsExtractor) (rate uint, keep bool, reason string, key string)
 	Start() error
+	GetKeyFields() []string
 }
 
 type ClusterSizer interface {
@@ -26,20 +34,11 @@ type SamplerFactory struct {
 	Config    config.Config   `inject:""`
 	Logger    logger.Logger   `inject:""`
 	Metrics   metrics.Metrics `inject:"genericMetrics"`
-	Peers     peer.Peers      `inject:""`
 	peerCount int
 	samplers  []Sampler
 }
 
 func (s *SamplerFactory) updatePeerCounts() {
-	if s.Peers != nil {
-		peers, err := s.Peers.GetPeers()
-		// Only update the stored count if there were no errors
-		if err == nil && len(peers) > 0 {
-			s.peerCount = len(peers)
-		}
-	}
-
 	// all the samplers who want it should use the stored count
 	for _, sampler := range s.samplers {
 		if clusterSizer, ok := sampler.(ClusterSizer); ok {
@@ -50,21 +49,13 @@ func (s *SamplerFactory) updatePeerCounts() {
 
 func (s *SamplerFactory) Start() error {
 	s.peerCount = 1
-	if s.Peers != nil {
-		s.Peers.RegisterUpdatedPeersCallback(s.updatePeerCounts)
-	}
+	// TODO: register updatePeerCounts to be called whenever the peer count changes
 	return nil
 }
 
 // GetSamplerImplementationForKey returns the sampler implementation for the given
 // samplerKey (dataset for legacy keys, environment otherwise), or nil if it is not defined
-func (s *SamplerFactory) GetSamplerImplementationForKey(samplerKey string, isLegacyKey bool) Sampler {
-	if isLegacyKey {
-		if prefix := s.Config.GetDatasetPrefix(); prefix != "" {
-			samplerKey = fmt.Sprintf("%s.%s", prefix, samplerKey)
-		}
-	}
-
+func (s *SamplerFactory) GetSamplerImplementationForKey(samplerKey string) Sampler {
 	c, _, err := s.Config.GetSamplerConfigForDestName(samplerKey)
 	if err != nil {
 		return nil
@@ -87,6 +78,8 @@ func (s *SamplerFactory) GetSamplerImplementationForKey(samplerKey string, isLeg
 		sampler = &EMAThroughputSampler{Config: c, Logger: s.Logger, Metrics: s.Metrics}
 	case *config.WindowedThroughputSamplerConfig:
 		sampler = &WindowedThroughputSampler{Config: c, Logger: s.Logger, Metrics: s.Metrics}
+	case *config.MockSamplerConfig:
+		sampler = &MockSampler{Config: c, Logger: s.Logger, Metrics: s.Metrics}
 	default:
 		s.Logger.Error().Logf("unknown sampler type %T. Exiting.", c)
 		os.Exit(1)
