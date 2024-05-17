@@ -212,7 +212,7 @@ func (t *Trace) CalculateAggregateTraceStats() {
 			parent_duration := time.Duration(parentSpan.Data["duration_ms"].(float64) * 1e6)
 			parent_absolute_end_time := parentSpan.Timestamp.Add(parent_duration)
 			diff := sp.Timestamp.Sub(parent_absolute_end_time)
-			sp.Data["meta.diff_from_parent_ms"] = diff.Milliseconds()
+			sp.Data["meta.diff_between_parent_ms"] = diff.Milliseconds()
 		}
 
 		if t.RootSpan != nil {
