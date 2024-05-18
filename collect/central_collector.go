@@ -830,6 +830,8 @@ func (c *CentralCollector) sendSpans(status *centralstore.CentralTraceStatus) {
 
 	c.Logger.Info().WithFields(logFields).Logf("Sending trace")
 
+	trace.CalculateAggregateTraceStats()
+
 	for _, sp := range trace.GetSpans() {
 		if sp.Data == nil {
 			sp.Data = make(map[string]interface{})

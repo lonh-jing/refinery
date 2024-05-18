@@ -62,7 +62,7 @@ func TestCentralCollector_AddSpan(t *testing.T) {
 
 			span := &types.Span{
 				TraceID: traceID1,
-				ID:      "456",
+				SpanID:  "456",
 				Event: types.Event{
 					Dataset: "aoeu",
 					APIKey:  legacyAPIKey,
@@ -90,7 +90,7 @@ func TestCentralCollector_AddSpan(t *testing.T) {
 
 			root := &types.Span{
 				TraceID: traceID1,
-				ID:      "123",
+				SpanID:  "123",
 				IsRoot:  true,
 				Event: types.Event{
 					Dataset: "aoeu",
@@ -148,7 +148,7 @@ func TestCentralCollector_ProcessTraces(t *testing.T) {
 				for s := 1; s < 10; s++ {
 					span := &types.Span{
 						TraceID: tid,
-						ID:      fmt.Sprintf("span%d", s),
+						SpanID:  fmt.Sprintf("span%d", s),
 						Event: types.Event{
 							Dataset:     "aoeu",
 							Environment: "test",
@@ -162,7 +162,7 @@ func TestCentralCollector_ProcessTraces(t *testing.T) {
 				// now write the root span
 				span := &types.Span{
 					TraceID: tid,
-					ID:      "span0",
+					SpanID:  "span0",
 					IsRoot:  true,
 				}
 				require.NoError(t, collector.AddSpan(span))
@@ -225,7 +225,7 @@ func TestCentralCollector_Decider(t *testing.T) {
 				for s := 1; s < 10; s++ {
 					span := &types.Span{
 						TraceID: tid,
-						ID:      fmt.Sprintf("span%d", s),
+						SpanID:  fmt.Sprintf("span%d", s),
 						Event: types.Event{
 							Dataset:     "aoeu",
 							Environment: "test",
@@ -240,7 +240,7 @@ func TestCentralCollector_Decider(t *testing.T) {
 				// now write the root span
 				span := &types.Span{
 					TraceID: tid,
-					ID:      "span0",
+					SpanID:  "span0",
 					IsRoot:  true,
 				}
 				err := collector.AddSpan(span)
@@ -304,7 +304,7 @@ func TestCentralCollector_OriginalSampleRateIsNotedInMetaField(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				span := &types.Span{
 					TraceID: fmt.Sprintf("trace-%v", i),
-					ID:      fmt.Sprintf("span%d", i),
+					SpanID:  fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						Dataset:    "aoeu",
 						APIKey:     legacyAPIKey,
@@ -337,7 +337,7 @@ func TestCentralCollector_OriginalSampleRateIsNotedInMetaField(t *testing.T) {
 			traceID := fmt.Sprintf("trace-%v", 1000)
 			err := collector.AddSpan(&types.Span{
 				TraceID: traceID,
-				ID:      "span1000",
+				SpanID:  "span1000",
 				Event: types.Event{
 					Dataset:    "no-upstream-sampling",
 					APIKey:     legacyAPIKey,
@@ -401,7 +401,7 @@ func TestCentralCollector_TransmittedSpansShouldHaveASampleRateOfAtLeastOne(t *t
 
 			span := &types.Span{
 				TraceID: fmt.Sprintf("trace-%v", 1),
-				ID:      "span1",
+				SpanID:  "span1",
 				Event: types.Event{
 					Dataset:    "aoeu",
 					APIKey:     legacyAPIKey,
@@ -460,7 +460,7 @@ func TestCentralCollector_SampleConfigReload(t *testing.T) {
 
 			span := &types.Span{
 				TraceID: "1",
-				ID:      "span1",
+				SpanID:  "span1",
 				Event: types.Event{
 					Dataset: dataset,
 					APIKey:  legacyAPIKey,
@@ -560,7 +560,7 @@ func TestCentralCollector_StableMaxAlloc(t *testing.T) {
 			for i := 0; i < totalTraceCount; i++ {
 				span := &types.Span{
 					TraceID: strconv.Itoa(i),
-					ID:      fmt.Sprintf("span%d", i),
+					SpanID:  fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						Dataset: "aoeu",
 						Data:    spandata[i],
@@ -702,7 +702,7 @@ func TestCentralCollector_AddCountsToRoot(t *testing.T) {
 			for i := 0; i < 4; i++ {
 				span := &types.Span{
 					TraceID: traceID,
-					ID:      fmt.Sprintf("span%d", i),
+					SpanID:  fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						Dataset: "aoeu",
 						Data: map[string]interface{}{
@@ -730,7 +730,7 @@ func TestCentralCollector_AddCountsToRoot(t *testing.T) {
 			// ok now let's add the root span and verify that both got sent
 			rootSpan := &types.Span{
 				TraceID: traceID,
-				ID:      "root",
+				SpanID:  "root",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data:    map[string]interface{}{},
@@ -806,7 +806,7 @@ func TestCentralCollector_LateRootGetsCounts(t *testing.T) {
 			for i := 0; i < 4; i++ {
 				span := &types.Span{
 					TraceID: traceID,
-					ID:      fmt.Sprintf("span%d", i),
+					SpanID:  fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						Dataset: "aoeu",
 						Data: map[string]interface{}{
@@ -836,7 +836,7 @@ func TestCentralCollector_LateRootGetsCounts(t *testing.T) {
 			// now we add the root span and verify that both got sent and that the root span had the span count
 			rootSpan := &types.Span{
 				TraceID: traceID,
-				ID:      "root",
+				SpanID:  "root",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data:    map[string]interface{}{},
@@ -911,7 +911,7 @@ func TestCentralCollector_LateSpanNotDecorated(t *testing.T) {
 
 			span := &types.Span{
 				TraceID: traceID,
-				ID:      "span1",
+				SpanID:  "span1",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data: map[string]interface{}{
@@ -933,7 +933,7 @@ func TestCentralCollector_LateSpanNotDecorated(t *testing.T) {
 
 			rootSpan := &types.Span{
 				TraceID: traceID,
-				ID:      "root",
+				SpanID:  "root",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data:    map[string]interface{}{},
@@ -995,7 +995,7 @@ func TestCentralCollector_AddAdditionalAttributes(t *testing.T) {
 
 			span := &types.Span{
 				TraceID: traceID,
-				ID:      "span1",
+				SpanID:  "span1",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data: map[string]interface{}{
@@ -1008,7 +1008,7 @@ func TestCentralCollector_AddAdditionalAttributes(t *testing.T) {
 
 			rootSpan := &types.Span{
 				TraceID: traceID,
-				ID:      "root",
+				SpanID:  "root",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data:    map[string]interface{}{},
@@ -1105,7 +1105,7 @@ func TestCentralCollector_SpanWithRuleReasons(t *testing.T) {
 
 			for i := 0; i < 4; i++ {
 				span := &types.Span{
-					ID: fmt.Sprintf("span%d", i),
+					SpanID: fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						Dataset: "aoeu",
 						Data: map[string]interface{}{
@@ -1134,7 +1134,7 @@ func TestCentralCollector_SpanWithRuleReasons(t *testing.T) {
 			for i, traceID := range traceIDs {
 				rootSpan := &types.Span{
 					TraceID: traceID,
-					ID:      "root",
+					SpanID:  "root",
 					Event: types.Event{
 						Dataset: "aoeu",
 						Data: map[string]interface{}{
@@ -1215,7 +1215,7 @@ func TestCentralCollector_Shutdown(t *testing.T) {
 				for s := 1; s < numberOfSpansPerTrace; s++ {
 					span := &types.Span{
 						TraceID: tid,
-						ID:      fmt.Sprintf("span%d", s),
+						SpanID:  fmt.Sprintf("span%d", s),
 						Event: types.Event{
 							Dataset:     "aoeu",
 							Environment: "test",
@@ -1229,7 +1229,7 @@ func TestCentralCollector_Shutdown(t *testing.T) {
 				// now write the root span
 				span := &types.Span{
 					TraceID: tid,
-					ID:      "span0",
+					SpanID:  "span0",
 					IsRoot:  true,
 				}
 				require.NoError(t, collector.AddSpan(span))
@@ -1286,7 +1286,7 @@ func TestCentralCollector_ProcessSpanImmediately(t *testing.T) {
 
 			span := &types.Span{
 				TraceID: "trace1",
-				ID:      "span1",
+				SpanID:  "span1",
 				Event: types.Event{
 					Dataset: "aoeu",
 					Data:    make(map[string]interface{}),

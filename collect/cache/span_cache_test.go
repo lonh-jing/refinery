@@ -129,7 +129,7 @@ func TestGetTraceIDs(t *testing.T) {
 				// test that we can add a span
 				span := &types.Span{
 					TraceID: fmt.Sprintf("trace%d", i),
-					ID:      fmt.Sprintf("span%d", i),
+					SpanID:  fmt.Sprintf("span%d", i),
 					Event: types.Event{
 						APIHost: "apihost",
 						APIKey:  "apikey",
