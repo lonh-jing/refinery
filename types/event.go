@@ -243,6 +243,7 @@ func (t *Trace) CalculateAggregateTraceStats() {
 		} else {
 			start_diff := sp.Timestamp.Sub(parentSpan.Timestamp)
 			sp.Data["meta.relative_start_time_parent_ms"] = start_diff.Milliseconds()
+			sp.Data["meta.relative_end_type_parnet_ms"] = start_diff.Milliseconds() + int64(sp.Data["duration_ms"].(float64)*1e6)
 
 			parent_duration := time.Duration(parentSpan.Data["duration_ms"].(float64) * 1e6)
 			parent_absolute_end_time := parentSpan.Timestamp.Add(parent_duration)
@@ -253,6 +254,7 @@ func (t *Trace) CalculateAggregateTraceStats() {
 		if t.RootSpan != nil {
 			diff := sp.Timestamp.Sub(t.RootSpan.Timestamp)
 			sp.Data["meta.relative_start_time_ms"] = diff.Milliseconds()
+			sp.Data["meta.relative_end_time_ms"] = diff.Milliseconds() + int64(sp.Data["duration_ms"].(float64)*1e6)
 		}
 	}
 
