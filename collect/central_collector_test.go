@@ -1570,7 +1570,7 @@ func Test_aggregate(t *testing.T) {
 	require.True(t, true)
 }
 
-func TestCompressRoundTrip(t *testing.T) {
+func TestEncodeRoundTrip(t *testing.T) {
 	t.Parallel()
 	// create a random payload
 	payload := make([]string, 1000)
@@ -1578,30 +1578,30 @@ func TestCompressRoundTrip(t *testing.T) {
 		payload[i] = fmt.Sprintf("%032x%032x", rand.Int63(), rand.Int63())
 	}
 
-	// encodeBatch it
-	compressed, err := encodeBatch(payload)
+	// encode it
+	encoded, err := encodeBatch(payload)
 	require.NoError(t, err)
 
-	// decodeBatch it
-	decompressed, err := decodeBatch(compressed)
+	// decode it
+	decoded, err := decodeBatch(encoded)
 	require.NoError(t, err)
 
-	// check that the decompressed payload is the same as the original
-	require.Equal(t, payload, decompressed)
+	// check that the decoded payload is the same as the original
+	require.Equal(t, payload, decoded)
 }
 
-func BenchmarkCompressRoundTrip(b *testing.B) {
+func BenchmarkEncodeRoundTrip(b *testing.B) {
 	// create a random payload
-	payload := make([]string, 100)
+	payload := make([]string, 1000)
 	for i := range payload {
 		payload[i] = fmt.Sprintf("%032x%032x", rand.Int63(), rand.Int63())
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		// encodeBatch it
-		compressed, _ := encodeBatch(payload)
-		// decodeBatch it
-		decodeBatch(compressed)
+		// encode it
+		encoded, _ := encodeBatch(payload)
+		// decode it
+		decodeBatch(encoded)
 	}
 }

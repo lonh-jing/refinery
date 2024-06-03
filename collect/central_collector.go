@@ -744,7 +744,6 @@ func (c *CentralCollector) decide() error {
 // - snappy alone
 // Turns out that in the context of Redis gossip and the overhead of gossip itself,
 // the best performance was achieved with just making a list of strings.
-
 func encodeBatch(traceIDs []string) ([]byte, error) {
 	s := strings.Join(traceIDs, "\t")
 	return []byte(s), nil
@@ -934,6 +933,24 @@ func (c *CentralCollector) makeDecisions(ctx context.Context) error {
 		stateMap[status.TraceID] = status
 		c.Metrics.Increment("collector_decide_trace")
 		span.End()
+	}
+
+	if len(keptIDs) > 0 {
+		data, err := encodeBatch(keptIDs)
+		if err != nil {
+			c.Logger.Error().Logf("error compressing kept trace IDs: %s", err)
+		} else {
+			c.Gossip.Publish(gossip_keep_channel, data)
+		}
+	}
+
+	if len(droppedIDs) > 0 {
+		data, err := encodeBatch(droppedIDs)
+		if err != nil {
+			c.Logger.Error().Logf("error compressing dropped trace IDs: %s", err)
+		} else {
+			c.Gossip.Publish(gossip_drop_channel, data)
+		}
 	}
 
 	updatedStatuses := make([]*centralstore.CentralTraceStatus, 0, len(stateMap))
