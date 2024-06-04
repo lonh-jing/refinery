@@ -938,7 +938,7 @@ func (c *CentralCollector) makeDecisions(ctx context.Context) error {
 	if len(keptIDs) > 0 {
 		data, err := encodeBatch(keptIDs)
 		if err != nil {
-			c.Logger.Error().Logf("error compressing kept trace IDs: %s", err)
+			c.Logger.Error().Logf("error encoding kept trace IDs: %s", err)
 		} else {
 			c.Gossip.Publish(gossip_keep_channel, data)
 		}
@@ -947,7 +947,7 @@ func (c *CentralCollector) makeDecisions(ctx context.Context) error {
 	if len(droppedIDs) > 0 {
 		data, err := encodeBatch(droppedIDs)
 		if err != nil {
-			c.Logger.Error().Logf("error compressing dropped trace IDs: %s", err)
+			c.Logger.Error().Logf("error encoding dropped trace IDs: %s", err)
 		} else {
 			c.Gossip.Publish(gossip_drop_channel, data)
 		}
