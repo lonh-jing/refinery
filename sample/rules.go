@@ -350,6 +350,15 @@ func conditionMatchesValue(condition *config.RulesBasedSamplerCondition, value i
 			if comparison, ok := compare(value, condition.Value); ok {
 				match = comparison == less || comparison == equal
 			}
+		case config.In:
+			if list, ok := condition.Value.([]interface{}); ok {
+				for _, listItem := range list {
+					if comparison, ok := compare(value, listItem); ok && comparison == equal {
+						match = true
+						break
+					}
+				}
+			}
 		}
 	case false:
 		switch condition.Operator {

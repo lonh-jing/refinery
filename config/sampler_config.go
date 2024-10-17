@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"encoding/json"
+	"errors"
 )
 
 // Define some constants for rule comparison operators
@@ -295,330 +297,64 @@ func (r *RulesBasedSamplerCondition) setMatchesFunction() error {
 	case HasRootSpan:
 		// this is evaluated at the trace level, so we don't need to do anything here
 		return nil
+	case In:
+		// Special handling for the 'in' operator to support array values
+		r.Matches = func(value any, exists bool) bool {
+			if !exists {
+				return false
+			}
+			valStr, ok := value.(string)
+			if !ok {
+				return false
+			}
+			values, ok := r.Value.([]interface{})
+			if !ok {
+				return false
+			}
+			for _, v := range values {
+				if valStr == v.(string) {
+					return true
+				}
+			}
+			return false
+		}
+		return nil
 	default:
 		return fmt.Errorf("unknown operator '%s'", r.Operator)
 	}
 	return nil
 }
 
-func tryConvertToInt(v any) (int, bool) {
-	switch value := v.(type) {
-	case int:
-		return value, true
-	case int64:
-		return int(value), true
-	case float64:
-		return int(value), true
-	case bool:
-		return 0, false
-	case string:
-		n, err := strconv.Atoi(value)
-		if err == nil {
-			return n, true
+// UnmarshalYAML is a custom unmarshaler for RulesBasedSamplerCondition
+// that supports Value being either a scalar or an array.
+func (r *RulesBasedSamplerCondition) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type rawCondition RulesBasedSamplerCondition
+	raw := rawCondition{}
+	if err := unmarshal(&raw); err != nil {
+		return err
+	}
+	*r = RulesBasedSamplerCondition(raw)
+
+	// Attempt to unmarshal Value as an array
+	var rawValue struct {
+		Value any `yaml:"Value"`
+	}
+	if err := unmarshal(&rawValue); err != nil {
+		return err
+	}
+
+	switch v := rawValue.Value.(type) {
+	case []interface{}:
+		// If Value is an array, check if the operator is 'in' or 'not-in'
+		if r.Operator != In && r.Operator != NotIn {
+			return errors.New("array values are only supported with 'in' or 'not-in' operators")
 		}
-		return 0, false
+		r.Value = v
 	default:
-		return 0, false
-	}
-}
-
-func tryConvertToFloat(v any) (float64, bool) {
-	switch value := v.(type) {
-	case float64:
-		return value, true
-	case int:
-		return float64(value), true
-	case int64:
-		return float64(value), true
-	case bool:
-		return 0, false
-	case string:
-		n, err := strconv.ParseFloat(value, 64)
-		return n, err == nil
-	default:
-		return 0, false
-	}
-}
-
-// In the case of strings, we want to stringize everything we get through a
-// "standard" format, which we are defining as whatever Go does with the %v
-// operator to sprintf. This will make sure that no matter how people encode
-// their values, they compare on an equal footing.
-func tryConvertToString(v any) (string, bool) {
-	return fmt.Sprintf("%v", v), true
-}
-
-func TryConvertToBool(v any) bool {
-	value, ok := tryConvertToString(v)
-	if !ok {
-		return false
-	}
-	str, err := strconv.ParseBool(value)
-	if err != nil {
-		return false
-	}
-	if str {
-		return true
-	} else {
-		return false
-	}
-}
-
-func setCompareOperators(r *RulesBasedSamplerCondition, condition string) error {
-	switch r.Datatype {
-	case "string":
-		conditionValue, ok := tryConvertToString(r.Value)
-		if !ok {
-			return fmt.Errorf("could not convert %v to string", r.Value)
-		}
-
-		switch condition {
-		case NEQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n != conditionValue
-				}
-				return false
-			}
-			return nil
-		case EQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n == conditionValue
-				}
-				return false
-			}
-			return nil
-		case GT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n > conditionValue
-				}
-				return false
-			}
-			return nil
-		case GTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n >= conditionValue
-				}
-				return false
-			}
-			return nil
-		case LT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n < conditionValue
-				}
-				return false
-			}
-			return nil
-		case LTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToString(spanValue); exists && ok {
-					return n <= conditionValue
-				}
-				return false
-			}
-			return nil
-		}
-	case "int":
-		// check if conditionValue and spanValue are not equal
-		conditionValue, ok := tryConvertToInt(r.Value)
-		if !ok {
-			return fmt.Errorf("could not convert %v to string", r.Value)
-		}
-		switch condition {
-		case NEQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n != conditionValue
-				}
-				return false
-			}
-			return nil
-		case EQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n == conditionValue
-				}
-				return false
-			}
-			return nil
-		case GT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n > conditionValue
-				}
-				return false
-			}
-			return nil
-		case GTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n >= conditionValue
-				}
-				return false
-			}
-			return nil
-		case LT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n < conditionValue
-				}
-				return false
-			}
-			return nil
-		case LTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToInt(spanValue); exists && ok {
-					return n <= conditionValue
-				}
-				return false
-			}
-			return nil
-		}
-	case "float":
-		conditionValue, ok := tryConvertToFloat(r.Value)
-		if !ok {
-			return fmt.Errorf("could not convert %v to string", r.Value)
-		}
-		// check if conditionValue and spanValue are not equal
-		switch condition {
-		case NEQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n != conditionValue
-				}
-				return false
-			}
-			return nil
-		case EQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n == conditionValue
-				}
-				return false
-			}
-			return nil
-		case GT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n > conditionValue
-				}
-				return false
-			}
-			return nil
-		case GTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n >= conditionValue
-				}
-				return false
-			}
-			return nil
-		case LT:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n < conditionValue
-				}
-				return false
-			}
-			return nil
-		case LTE:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n, ok := tryConvertToFloat(spanValue); exists && ok {
-					return n <= conditionValue
-				}
-				return false
-			}
-			return nil
-		}
-	case "bool":
-		conditionValue := TryConvertToBool(r.Value)
-
-		switch condition {
-		case NEQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n := TryConvertToBool(spanValue); exists {
-					return n != conditionValue
-				}
-				return false
-			}
-			return nil
-		case EQ:
-			r.Matches = func(spanValue any, exists bool) bool {
-				if n := TryConvertToBool(spanValue); exists {
-					return n == conditionValue
-				}
-				return false
-			}
-			return nil
-		}
-	case "":
-		// user did not specify datatype, so do not specify matches function
-	default:
-		return fmt.Errorf("%s must be either string, int, float or bool", r.Datatype)
-	}
-	return nil
-}
-
-func setMatchStringBasedOperators(r *RulesBasedSamplerCondition, condition string) error {
-	conditionValue, ok := tryConvertToString(r.Value)
-	if !ok {
-		return fmt.Errorf("%s value must be a string, but was '%s'", condition, r.Value)
+		r.Value = rawValue.Value
 	}
 
-	switch condition {
-	case StartsWith:
-		r.Matches = func(spanValue any, exists bool) bool {
-			s, ok := tryConvertToString(spanValue)
-			if ok {
-				return strings.HasPrefix(s, conditionValue)
-			}
-			return false
-		}
-	case Contains:
-		r.Matches = func(spanValue any, exists bool) bool {
-			s, ok := tryConvertToString(spanValue)
-			if ok {
-				return strings.Contains(s, conditionValue)
-			}
-			return false
-		}
-	case DoesNotContain:
-		r.Matches = func(spanValue any, exists bool) bool {
-			s, ok := tryConvertToString(spanValue)
-			if ok {
-				return !strings.Contains(s, conditionValue)
-			}
-			return false
-		}
-	}
-
-	return nil
-}
-
-func setRegexStringMatchOperator(r *RulesBasedSamplerCondition) error {
-	conditionValue, ok := tryConvertToString(r.Value)
-	if !ok {
-		return fmt.Errorf("regex value must be a string, but was '%s'", r.Value)
-	}
-
-	regex, err := regexp.Compile(conditionValue)
-	if err != nil {
-		return fmt.Errorf("'matches' pattern must be a valid Go regexp, but was '%s'", r.Value)
-	}
-
-	r.Matches = func(spanValue any, exists bool) bool {
-		s, ok := tryConvertToString(spanValue)
-		if ok {
-			return regex.MatchString(s)
-		}
-		return false
-	}
-
-	return nil
+	return r.Init()
 }
 
 func (r *RulesBasedSamplerConfig) String() string {
